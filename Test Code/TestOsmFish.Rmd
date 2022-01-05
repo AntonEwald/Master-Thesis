@@ -1,0 +1,70 @@
+---
+title: "Test Data"
+author: "Anton Holm"
+date: '2021-12-13'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(loomR)
+library(tidyverse)
+library(rhdf5)
+library(MASS)
+library(dbscan)
+
+################################ For cells ###########################################
+#Read data and extract useful information
+lfile <- connect(filename = "osmFISH.loom", mode = "r+")
+gene_count <- lfile$matrix[,]
+gene_names <- lfile$row.attrs$Gene[]
+clusters <- lfile$col.attrs$ClusterID[]
+x <- lfile$col.attrs$X[]
+y <- lfile$col.attrs$Y[]
+df <- as.data.frame(gene_count)
+colnames(df) <- gene_names
+cell_id <- lfile$col.attrs$CellID[]
+
+#Spatial information of different cells
+data <- df %>% 
+  mutate(CellID = cell_id, Cluster = as.factor(clusters), x = x, y = y) %>% 
+  dplyr::select(CellID, Cluster, x, y, everything())
+
+ggplot(data, aes(x = x, y = y, col = Cluster)) + 
+  geom_point()
+###########################################################################################
+
+
+#Gaussian kernel width = h
+kernel <- function(x, h){
+  1/(2*pi*h^2) * exp(-1/2 * x/h^2)
+}
+
+#Load data of all genes (list of dataframes)
+genes <- h5ls("osmFISHcoords.hdf5")
+
+#List of dataframes of all gene coordinates
+gene_names <- genes$name
+all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x))
+genes_coords <- all_genes_df %>% 
+  reduce(full_join, by = c("V1", "V2", "gene"))
+
+#Read coords of every gene as list of matrices (each matrix is for one gene)
+all_genes_matrix <- map(gene_names, ~t(h5read("osmFISHcoords.hdf5", .x)))
+
+#Calculate distance to all k-nearest neighbors (list with each gene-type in the list)
+knn_distance <- map(1:39, ~kNNdist(all_genes_matrix[[.x]], k = 50, all = TRUE))
+#Calculate the kernel distance to each neighbor
+kernel_knn_dist <- map(1:39, ~kernel(knn_distance[[.x]], h = 2.5))
+#Sum kernel distance for all 50 neighbor for each observation to get the KDE for all genes
+knn_kde <- map(1:39, ~rowSums(kernel_knn_dist[[.x]]))
+
+ggplot(as.data.frame(all_genes_matrix[[1]]), aes(x = V1, y = V2, alpha = knn_kde[[1]])) +
+  geom_point()
+
+ggplot(as.data.frame(all_genes_matrix[[2]]), aes(x = V1, y = V2, alpha = knn_kde[[2]])) +
+  geom_point()
+```
