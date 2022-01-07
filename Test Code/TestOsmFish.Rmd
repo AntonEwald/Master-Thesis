@@ -17,7 +17,9 @@ library(MASS)
 library(dbscan)
 library(raster)
 library(matrixStats)
+```
 
+```{r}
 ################################ For cells ###########################################
 #Read data and extract useful information
 lfile <- connect(filename = "osmFISH.loom", mode = "r+")
@@ -38,30 +40,31 @@ data <- df %>%
 ggplot(data, aes(x = x, y = y, col = Cluster)) + 
   geom_point()
 ###########################################################################################
+```
 
-
+```{r}
+########################################## SSAM ###########################################
 #Gaussian kernel width = h
 kernel <- function(x, h){
   1/(2*pi*h^2) * exp(-1/2 * x/h^2)
 }
 
-#Load data of all genes (list of dataframes)
+## Load data of all genes (list of dataframes) ##
 genes <- h5ls("osmFISHcoords.hdf5")
-
-#List of dataframes of all gene coordinates
 gene_names <- genes$name
+#Genes as list of df
 all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x))
+#Genes in one df with labels in column 3
 genes_coords <- all_genes_df %>% 
   reduce(full_join, by = c("V1", "V2", "gene"))
-
-#Read coords of every gene as list of matrices (each matrix is for one gene)
+#list of matrices with coordinates of genes
 all_genes_matrix <- map(gene_names, ~t(h5read("osmFISHcoords.hdf5", .x)))
 
-#Calculate distance to all k-nearest neighbors (list with each gene-type in the list)
+## Kernel Density Estimation ##
+#Calculate euclidean distance to all k-nearest neighbors (list with each gene-type in the list)
 knn_distance <- map(1:39, ~kNNdist(all_genes_matrix[[.x]], k = 50, all = TRUE))
-#Calculate the kernel distance to each neighbor
+#Apply kernel function
 kernel_knn_dist <- map(1:39, ~kernel(knn_distance[[.x]], h = 2.5))
-#Sum kernel distance for all 50 neighbor for each observation to get the KDE for all genes
 knn_kde <- map(1:39, ~rowSums(kernel_knn_dist[[.x]]))
 
 #2 example plots of the density, first one fewer points, second many points
@@ -69,28 +72,49 @@ ggplot(as.data.frame(all_genes_matrix[[1]]), aes(x = V1, y = V2, alpha = knn_kde
   geom_point()
 ggplot(as.data.frame(all_genes_matrix[[2]]), aes(x = V1, y = V2, alpha = knn_kde[[2]])) +
   geom_point()
+##
 
 
-####create vector field
-# Extract largest x and y coordinate to create a grid/pixels
+## create vector field ##
+# Extract largest x and y coordinate from the genes to create a grid/pixels
 x_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,1])
 y_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,2])
+max_coord = max(x_max, y_max)
 #Create the grid
-pixels <- raster(xmn = 0, xmx = x_max, ymn = 0, ymx = y_max, res = 1000)
+pixels <- raster(xmn = 0, xmx = max_coord, ymn = 0, ymx = max_coord, res = 1000)
 #List of df. One df per gene. Df contain coordinates, name, kde value
 kde_genes_df <- map(1:39, ~mutate(all_genes_df[[.]], value = knn_kde[[.]]))
 #Assign genes to pixels. Sum kde of each gene type up
 rast <- map(1:39, ~rasterize(kde_genes_df[[.]][,1:2], pixels, field = kde_genes_df[[.]][4], fun = sum))
-#list of df. One df per gene. 2 columns in df. Cell ID and KDE of gene. 
-vector_field <- map(1:39, ~raster::extract(rast[[.]], kde_genes_df[[.]][,1:2], df = TRUE)) %>% 
-  lapply(function(e) replace(e, is.na(e), 0))
+#Create Vector Field (list of df)
+vec_field <- map(1:39, ~getValues(rast[[.]]) %>% 
+                   as.data.frame() %>% 
+                   replace(is.na(.), 0))
+
+#Need better way to rename column
+for(i in 1:39){
+  names(vec_field[[i]])[1] <- gene_names[i]
+}
+
+#The complete vectorfield. Each column contains the KDE of every pixel of a gene
+full_vec_field <- do.call(cbind.data.frame, vec_field) %>% 
+  mutate(total_kde = rowSums(.),
+         x = rep(0:(dim(pixels)[2]-1), length.out = n()),
+         y = rep((dim(pixels)[1]-1):0,  each = dim(pixels)[2])) %>% 
+  rowid_to_column("PixelID")
 
 #plot of vec field (one plot per gene)
 vec_field_plotted <- map(1:39, ~plot(rast[[.]]))
+##
+
+full_vec_field %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_raster(aes(fill = total_kde))
+
 ```
 
 I now have the vector field with "vector_field" being a list of df where each df has pixel ID and KDE value of that gene in that pixel.
-Next, need to do the downsampling.
+Next, need to do the downsampling. But first I need to normalize the vector field somehow.
 
 
 Also need to read about Smoothing Splines (See Supervised Learning prints sec 6.1-6.3)
