@@ -17,6 +17,8 @@ library(MASS)
 library(dbscan)
 library(raster)
 library(matrixStats)
+Sys.setenv(RETICULATE_PYTHON = "C:\\Users\\anton\\PycharmProjects\\HelloWorld\\venv\\Scripts\\python.exe")
+library(reticulate)
 ```
 
 ```{r}
@@ -49,16 +51,22 @@ kernel <- function(x, h){
   1/(2*pi*h^2) * exp(-1/2 * x/h^2)
 }
 
+#Proportions from SSAM code
+pix_per_um <- 15.3846
+um_per_pix <- 1/pix_per_um
+
 ## Load data of all genes (list of dataframes) ##
 genes <- h5ls("osmFISHcoords.hdf5")
 gene_names <- genes$name
 #Genes as list of df
-all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x))
+all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x) %>% 
+                      mutate(V1 = V1 * um_per_pix, V2 = V2 * um_per_pix))
 #Genes in one df with labels in column 3
 genes_coords <- all_genes_df %>% 
   reduce(full_join, by = c("V1", "V2", "gene"))
 #list of matrices with coordinates of genes
-all_genes_matrix <- map(gene_names, ~t(h5read("osmFISHcoords.hdf5", .x)))
+all_genes_matrix_unscaled <- map(gene_names, ~t(h5read("osmFISHcoords.hdf5", .x)))
+all_genes_matrix <- lapply(all_genes_matrix_unscaled, function(x) x*um_per_pix)
 
 ## Kernel Density Estimation ##
 #Calculate euclidean distance to all k-nearest neighbors (list with each gene-type in the list)
@@ -81,7 +89,7 @@ x_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,1])
 y_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,2])
 max_coord = max(x_max, y_max)
 #Create the grid
-pixels <- raster(xmn = 0, xmx = max_coord, ymn = 0, ymx = max_coord, res = 1000)
+pixels <- raster(xmn = 0, xmx = max_coord, ymn = 0, ymx = max_coord, res = 10)
 #List of df. One df per gene. Df contain coordinates, name, kde value
 kde_genes_df <- map(1:39, ~mutate(all_genes_df[[.]], value = knn_kde[[.]]))
 #Assign genes to pixels. Sum kde of each gene type up
@@ -100,7 +108,7 @@ for(i in 1:39){
 full_vec_field <- do.call(cbind.data.frame, vec_field) %>% 
   mutate(total_kde = rowSums(.),
          x = rep(0:(dim(pixels)[2]-1), length.out = n()),
-         y = rep((dim(pixels)[1]-1):0,  each = dim(pixels)[2])) %>% 
+         y = rep(0:(dim(pixels)[1]-1),  each = dim(pixels)[2])) %>% 
   rowid_to_column("PixelID")
 
 #plot of vec field (one plot per gene)
@@ -111,10 +119,88 @@ full_vec_field %>%
   ggplot(aes(x = x, y = y)) +
   geom_raster(aes(fill = total_kde))
 
+full_vec_field %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point(aes(alpha = total_kde))
+
+full_vec_field %>% 
+  arrange(desc(total_kde)) %>% 
+  slice(1:30000) %>% 
+  sample_n(size = 12000) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point(size = 0.4, aes(alpha = total_kde))
+
+kde_grid <- full_vec_field %>% 
+  dplyr::select(x, y, total_kde) %>% 
+  spread(key = x, value = total_kde) %>% 
+  dplyr::select(-y) %>% 
+  as.matrix()
+
+save(kde_grid, file = "kdematrix.Rdata")
+
+```
+
+```{python}
+### Downsamopling using python function
+from scipy import ndimage as ndi
+import matplotlib.pyplot as plt
+from skimage.feature import peak_local_max
+from skimage import data, img_as_float
+
+
+im = r.kde_grid
+
+# image_max is the dilation of im with a 20*20 structuring element
+# It is used within peak_local_max function
+image_max = ndi.maximum_filter(im, size=0.5, mode='constant')
+
+# Comparison between image_max and im to find the coordinates of local maxima
+coordinates = peak_local_max(im, min_distance=1)
+
+# display results
+fig, axes = plt.subplots(1, 3, figsize=(8, 3), sharex=True, sharey=True)
+ax = axes.ravel()
+ax[0].imshow(im, cmap=plt.cm.gray)
+ax[0].axis('off')
+ax[0].set_title('Original')
+
+ax[1].imshow(image_max, cmap=plt.cm.gray)
+ax[1].axis('off')
+ax[1].set_title('Maximum filter')
+
+ax[2].imshow(im, cmap=plt.cm.gray)
+ax[2].autoscale(False)
+ax[2].plot(coordinates[:, 1], coordinates[:, 0], 'r.')
+ax[2].axis('off')
+ax[2].set_title('Peak local max')
+
+fig.tight_layout()
+
+plt.show()
+
+```
+
+```{r}
+as_data_frame(py$coordinates) %>% 
+  rename(x = "V1", y = "V2") %>% 
+  left_join(full_vec_field, by = c("x", "y")) %>% 
+  arrange(desc(total_kde))
+
+full_vec_field %>% 
+  filter(x == 318, y == 171)
+
+full_vec_field %>% 
+  arrange(desc(total_kde)) %>% 
+  dplyr::select(total_kde)
 ```
 
 I now have the vector field with "vector_field" being a list of df where each df has pixel ID and KDE value of that gene in that pixel.
 Next, need to do the downsampling. But first I need to normalize the vector field somehow.
+
+
+They never use peak_local_max in the source code! Ctrl + F "find_localmax"
+
+
 
 
 Also need to read about Smoothing Splines (See Supervised Learning prints sec 6.1-6.3)
