@@ -1,1 +1,1 @@
-# Master-Thesis
+This is my repository for my Master Thesis which is working as a back-up system in case I lose it.

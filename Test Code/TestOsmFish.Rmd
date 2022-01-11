@@ -89,7 +89,7 @@ x_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,1])
 y_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,2])
 max_coord = max(x_max, y_max)
 #Create the grid
-pixels <- raster(xmn = 0, xmx = max_coord, ymn = 0, ymx = max_coord, res = 10)
+pixels <- raster(xmn = 0, xmx = max_coord, ymn = 0, ymx = max_coord, res = 4)
 #List of df. One df per gene. Df contain coordinates, name, kde value
 kde_genes_df <- map(1:39, ~mutate(all_genes_df[[.]], value = knn_kde[[.]]))
 #Assign genes to pixels. Sum kde of each gene type up
@@ -115,6 +115,19 @@ full_vec_field <- do.call(cbind.data.frame, vec_field) %>%
 vec_field_plotted <- map(1:39, ~plot(rast[[.]]))
 ##
 
+#Construct pixel matrix with kde values in each element of matrix to use for peak_local_max function for downsampling
+kde_grid <- full_vec_field %>% 
+  dplyr::select(x, y, total_kde) %>% 
+  spread(key = x, value = total_kde) %>% 
+  dplyr::select(-y) %>% 
+  as.matrix()
+
+save(kde_grid, file = "kdematrix.Rdata")
+```
+
+
+```{r}
+#Testing and making sure kde and data match up with raster object
 full_vec_field %>% 
   ggplot(aes(x = x, y = y)) +
   geom_raster(aes(fill = total_kde))
@@ -127,17 +140,24 @@ full_vec_field %>%
   arrange(desc(total_kde)) %>% 
   slice(1:30000) %>% 
   sample_n(size = 12000) %>% 
-  ggplot(aes(x = x, y = y)) + 
-  geom_point(size = 0.4, aes(alpha = total_kde))
+  ggplot(aes(x = x*pix_per_um, y = y*pix_per_um)) + 
+  geom_point(size = 1) +
+  scale_x_reverse()
 
-kde_grid <- full_vec_field %>% 
-  dplyr::select(x, y, total_kde) %>% 
-  spread(key = x, value = total_kde) %>% 
-  dplyr::select(-y) %>% 
-  as.matrix()
+vec_field[[36]] %>% 
+  rowid_to_column() %>% 
+  arrange(desc(Ttr_Hybridization13))
 
-save(kde_grid, file = "kdematrix.Rdata")
-
+vec_field[[15]] %>% mutate(total_kde = rowSums(.),
+         x = rep(0:(dim(pixels)[2]-1), length.out = n()),
+         y = rep(0:(dim(pixels)[1]-1),  each = dim(pixels)[2])) %>% 
+  filter(total_kde != 0) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point(size = 0.1, aes(alpha = total_kde)) +
+  scale_y_reverse()
+  
+full_vec_field %>% 
+  filter(total_kde != 0)
 ```
 
 ```{python}
@@ -149,57 +169,42 @@ from skimage import data, img_as_float
 
 
 im = r.kde_grid
-
-# image_max is the dilation of im with a 20*20 structuring element
-# It is used within peak_local_max function
-image_max = ndi.maximum_filter(im, size=0.5, mode='constant')
-
-# Comparison between image_max and im to find the coordinates of local maxima
-coordinates = peak_local_max(im, min_distance=1)
-
-# display results
-fig, axes = plt.subplots(1, 3, figsize=(8, 3), sharex=True, sharey=True)
-ax = axes.ravel()
-ax[0].imshow(im, cmap=plt.cm.gray)
-ax[0].axis('off')
-ax[0].set_title('Original')
-
-ax[1].imshow(image_max, cmap=plt.cm.gray)
-ax[1].axis('off')
-ax[1].set_title('Maximum filter')
-
-ax[2].imshow(im, cmap=plt.cm.gray)
-ax[2].autoscale(False)
-ax[2].plot(coordinates[:, 1], coordinates[:, 0], 'r.')
-ax[2].axis('off')
-ax[2].set_title('Peak local max')
-
-fig.tight_layout()
-
-plt.show()
-
+# image_max is the dilation of im with a size*size structuring element
+image_max = ndi.maximum_filter(im, size=10)
 ```
 
 ```{r}
-as_data_frame(py$coordinates) %>% 
-  rename(x = "V1", y = "V2") %>% 
-  left_join(full_vec_field, by = c("x", "y")) %>% 
-  arrange(desc(total_kde))
 
-full_vec_field %>% 
-  filter(x == 318, y == 171)
+#Constructed using python code last chunk. Maximum filter picture
+max_img <- py$image_max
+max_img[max_img == 0] <- NA
+  
 
-full_vec_field %>% 
-  arrange(desc(total_kde)) %>% 
-  dplyr::select(total_kde)
+#Construct local maximum vector field
+local_maximum_vec_field <- full_vec_field %>% 
+  filter(total_kde %in% max_img & total_kde > 0.04) %>%  # Keep pixels contained in max_img and larger than 0.04 (from their code)
+  filter_at(vars(2:40), any_vars(. > 0.027)) %>% # Keep pixels with at least one gene higher density than 0.027 (from their code)
+  filter(x < 350) #They removed part of the image using a mask. In practice, they chopped of part of the x-axis (the chopped part was used for testing stripping efficiency)
+  
+#Make the plot of local maximum vectors as they did in SSAM (at code)
+local_maximum_vec_field %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point(shape = ".") +
+  xlim(900, 0) +
+  ylim(0, 900)
 ```
 
-I now have the vector field with "vector_field" being a list of df where each df has pixel ID and KDE value of that gene in that pixel.
-Next, need to do the downsampling. But first I need to normalize the vector field somehow.
+Done last time: I figured out how they used the maximum filter (they dont use local peak max!!). I applied it on the vector field and got a similar result as in the paper (code part of SSAM). They chopped off part of the x-axis so I did the same.
+
+What to do next time: find out how to normalize vectorfield. Remove data points outside of the border.
 
 
-They never use peak_local_max in the source code! Ctrl + F "find_localmax"
+They never use peak_local_max in the source code! They just make use of the maximum_filter.
+  - Here is how their downsampling works: They use ndi.maximum_filter(size = 3). We have a pixel image with L1-norm density value at each pixel. If size = 3, then every pixel now gets the largest density value from any pixel that is at most 3 pixelsteps away from it. Then take your dataframe, filter away any pixel that does not have a total kde value contained in this maximum_filter matrix we get.
+  - What does this really mean? We pick every pixel with the highest density conditioned on that the pixels needs to be at least "size" amount of steps away from eachothers. So if we have 2 high density pixels close to eachother, we only pick the pixel with the largest density.
+  
 
+From the code they specify width = 2080, height = 3380 um. Does this mean they have rectangles instead of squares as pixels? Is this good/bad?
 
 
 
