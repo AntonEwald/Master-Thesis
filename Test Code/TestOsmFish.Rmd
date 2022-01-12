@@ -22,7 +22,7 @@ library(reticulate)
 ```
 
 ```{r}
-################################ For cells ###########################################
+################################ For cells ####################################################
 #Read data and extract useful information
 lfile <- connect(filename = "osmFISH.loom", mode = "r+")
 gene_count <- lfile$matrix[,]
@@ -41,81 +41,80 @@ data <- df %>%
 
 ggplot(data, aes(x = x, y = y, col = Cluster)) + 
   geom_point()
-###########################################################################################
+################################################################################################
 ```
 
 ```{r}
-########################################## SSAM ###########################################
+########################################## Load data ###########################################
 #Gaussian kernel width = h
 kernel <- function(x, h){
   1/(2*pi*h^2) * exp(-1/2 * x/h^2)
 }
-
-#Proportions from SSAM code
+#Number of different types of genes
+gene_type_quant <- 1:39
+#Proportions from data creator
 pix_per_um <- 15.3846
 um_per_pix <- 1/pix_per_um
-
-## Load data of all genes (list of dataframes) ##
+#Load data of all genes
 genes <- h5ls("osmFISHcoords.hdf5")
 gene_names <- genes$name
 #Genes as list of df
 all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x) %>% 
                       mutate(V1 = V1 * um_per_pix, V2 = V2 * um_per_pix))
-#Genes in one df with labels in column 3
+#Genes in one df
 genes_coords <- all_genes_df %>% 
   reduce(full_join, by = c("V1", "V2", "gene"))
 #list of matrices with coordinates of genes
 all_genes_matrix_unscaled <- map(gene_names, ~t(h5read("osmFISHcoords.hdf5", .x)))
-all_genes_matrix <- lapply(all_genes_matrix_unscaled, function(x) x*um_per_pix)
+all_genes_matrix <- lapply(all_genes_matrix_unscaled, function(x) x*um_per_pix) #
+################################################################################################
+```
 
-## Kernel Density Estimation ##
+```{r}
+################################### Kernel Density Estimation ##################################
 #Calculate euclidean distance to all k-nearest neighbors (list with each gene-type in the list)
-knn_distance <- map(1:39, ~kNNdist(all_genes_matrix[[.x]], k = 50, all = TRUE))
-#Apply kernel function
-kernel_knn_dist <- map(1:39, ~kernel(knn_distance[[.x]], h = 2.5))
-knn_kde <- map(1:39, ~rowSums(kernel_knn_dist[[.x]]))
+knn_distance <- map(gene_type_quant, ~kNNdist(all_genes_matrix[[.x]], k = 50, all = TRUE))
+#Apply kernel function and sum up distances
+kernel_knn_dist <- map(gene_type_quant, ~kernel(knn_distance[[.x]], h = 2.5))
+knn_kde <- map(gene_type_quant, ~rowSums(kernel_knn_dist[[.x]]))
 
 #2 example plots of the density, first one fewer points, second many points
 ggplot(as.data.frame(all_genes_matrix[[1]]), aes(x = V1, y = V2, alpha = knn_kde[[1]])) +
   geom_point()
 ggplot(as.data.frame(all_genes_matrix[[2]]), aes(x = V1, y = V2, alpha = knn_kde[[2]])) +
   geom_point()
-##
+################################################################################################
+```
 
-
-## create vector field ##
+```{r}
+###################################### create vector field #####################################
 # Extract largest x and y coordinate from the genes to create a grid/pixels
 x_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,1])
 y_max <- max(do.call(rbind, lapply(all_genes_matrix, colMaxs))[,2])
-max_coord = max(x_max, y_max)
-#Create the grid
+max_coord = max(x_max, y_max) #Use the maximum of both to create a square grid
+#Create the grid (res 1 takes too much memory)
 pixels <- raster(xmn = 0, xmx = max_coord, ymn = 0, ymx = max_coord, res = 4)
-#List of df. One df per gene. Df contain coordinates, name, kde value
-kde_genes_df <- map(1:39, ~mutate(all_genes_df[[.]], value = knn_kde[[.]]))
-#Assign genes to pixels. Sum kde of each gene type up
-rast <- map(1:39, ~rasterize(kde_genes_df[[.]][,1:2], pixels, field = kde_genes_df[[.]][4], fun = sum))
-#Create Vector Field (list of df)
-vec_field <- map(1:39, ~getValues(rast[[.]]) %>% 
+
+#Create Vector Field (list of df with pixel density of each gene) (From paper, each df is one picture with one gene type)
+kde_genes_df <- map(gene_type_quant, ~mutate(all_genes_df[[.]], value = knn_kde[[.]]))
+rast <- map(gene_type_quant, ~rasterize(kde_genes_df[[.]][,1:2], pixels, field = kde_genes_df[[.]][4], fun = sum))
+vec_field <- map(gene_type_quant, ~getValues(rast[[.]]) %>% 
                    as.data.frame() %>% 
                    replace(is.na(.), 0))
 
 #Need better way to rename column
-for(i in 1:39){
+for(i in gene_type_quant){
   names(vec_field[[i]])[1] <- gene_names[i]
 }
 
-#The complete vectorfield. Each column contains the KDE of every pixel of a gene
+#The complete vectorfield. Each column contains the KDE of every pixel of a gene (From paper, pictures are stacked)
 full_vec_field <- do.call(cbind.data.frame, vec_field) %>% 
   mutate(total_kde = rowSums(.),
          x = rep(0:(dim(pixels)[2]-1), length.out = n()),
          y = rep(0:(dim(pixels)[1]-1),  each = dim(pixels)[2])) %>% 
   rowid_to_column("PixelID")
 
-#plot of vec field (one plot per gene)
-vec_field_plotted <- map(1:39, ~plot(rast[[.]]))
-##
-
-#Construct pixel matrix with kde values in each element of matrix to use for peak_local_max function for downsampling
+#Construct pixel matrix with kde values in each element of matrix to use for maximum_filter function for downsampling
 kde_grid <- full_vec_field %>% 
   dplyr::select(x, y, total_kde) %>% 
   spread(key = x, value = total_kde) %>% 
@@ -128,6 +127,11 @@ save(kde_grid, file = "kdematrix.Rdata")
 
 ```{r}
 #Testing and making sure kde and data match up with raster object
+
+
+#plot of vec field (one plot per gene)
+vec_field_plotted <- map(gene_type_quant, ~plot(rast[[.]]))
+
 full_vec_field %>% 
   ggplot(aes(x = x, y = y)) +
   geom_raster(aes(fill = total_kde))
@@ -161,7 +165,7 @@ full_vec_field %>%
 ```
 
 ```{python}
-### Downsamopling using python function
+### Downsampling using python function
 from scipy import ndimage as ndi
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
@@ -174,6 +178,7 @@ image_max = ndi.maximum_filter(im, size=10)
 ```
 
 ```{r}
+################################### Downsampled vectorfield ##################################
 
 #Constructed using python code last chunk. Maximum filter picture
 max_img <- py$image_max
@@ -192,12 +197,13 @@ local_maximum_vec_field %>%
   geom_point(shape = ".") +
   xlim(900, 0) +
   ylim(0, 900)
+##############################################################################################
+
 ```
 
 
 Done last time: I figured out how they used the maximum filter (they dont use local peak max!!). I applied it on the vector field and got a similar result as in the paper (code part of SSAM). They chopped off part of the x-axis so I did the same.
 
-What to do next time: find out how to normalize vectorfield. Remove data points outside of the border.
 
 
 They never use peak_local_max in the source code! They just make use of the maximum_filter.
@@ -207,6 +213,7 @@ They never use peak_local_max in the source code! They just make use of the maxi
 
 From the code they specify width = 2080, height = 3380 um. Does this mean they have rectangles instead of squares as pixels? Is this good/bad?
 
-
+Ask Mats and/or Chun: how the normalization works. It is called sctransform and based on biology and negative binomial. ( Hafemeister, C. & Satija, R. Normalization and variance stabilization of singlecell RNA-seq data using regularized negative binomial regression. Genome
+Biol. 20, 296 (2019).)
 
 Also need to read about Smoothing Splines (See Supervised Learning prints sec 6.1-6.3)
