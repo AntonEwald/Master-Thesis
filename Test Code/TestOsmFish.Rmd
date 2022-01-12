@@ -134,7 +134,7 @@ full_vec_field %>%
 
 full_vec_field %>% 
   ggplot(aes(x = x, y = y)) + 
-  geom_point(aes(alpha = total_kde))
+  geom_point( shape = ".")
 
 full_vec_field %>% 
   arrange(desc(total_kde)) %>% 
@@ -193,6 +193,7 @@ local_maximum_vec_field %>%
   xlim(900, 0) +
   ylim(0, 900)
 ```
+
 
 Done last time: I figured out how they used the maximum filter (they dont use local peak max!!). I applied it on the vector field and got a similar result as in the paper (code part of SSAM). They chopped off part of the x-axis so I did the same.
 
