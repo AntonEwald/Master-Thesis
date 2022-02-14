@@ -1,0 +1,69 @@
+---
+title: "Density Estimation"
+author: "Anton Holm"
+date: '2022-02-14'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(MASS)
+library(tidyverse)
+library(spatstat)
+library(dbscan)
+```
+
+```{r}
+set.seed(931031)
+
+nr_clusters <- 60
+tot_genes <- 150000
+
+#600 different mean vectors (600 different gaussians in GMM)
+mu <-cbind(runif(nr_clusters, 0, 2000), runif(nr_clusters, 0, 3000))
+
+#Constant covariance matrix. 11.6um per cell
+Cov <- matrix(c(11.6, 0, 0, 11.6), nrow = 2, ncol = 2)
+
+#Decide which gaussian to sample from (same probabilities)
+GMM_sample <- sample.int(nr_clusters, tot_genes, replace = TRUE) %>% 
+  table()
+
+# Create Sample from GMM
+gene_coord <- matrix(NA, ncol = 3, nrow = 0)
+for (i in 1:nr_clusters){
+  point <- cbind(i, mvrnorm(n = GMM_sample[i], mu = mu[i, ], Sigma = Cov))
+  gene_coord <- rbind(gene_coord, point)
+}
+genes_df <- gene_coord %>% 
+  as_tibble() %>% 
+  rename(c("Gaussian" = i, "x" = V2, "y" = V3)) %>% 
+  mutate(Gaussian = as.factor(Gaussian))
+```
+
+```{r}
+# Multivariate gaussian density function
+multivariate_gaussian <- function(X, mu, Sigma){
+  (det(Sigma*2*pi))^(-1/2) * exp(-1/2 * (t(as.matrix(X-mu))) %*% solve(Sigma) %*% (as.matrix((X-mu))))
+}
+
+#Calculate true density of each gene
+true_dens <- as.matrix(NA)
+for (i in 1:nrow(gene_coord)) {
+  true_dens[i] <- multivariate_gaussian(X = gene_coord[i, 2:3], mu = mu[gene_coord[i, 1], ], Sigma = Cov)
+}
+
+#Calculate the kraskov density estimation
+kraskov_estim <- function(x, k, d){
+  exp(digamma(k) - digamma(tot_genes) - d*log(2*nndist(x, k = k)) - log(pi^(d/2)/gamma(1 + d/2)))
+}
+kraskov_dens <- kraskov_estim(gene_coord[,2:3], k = 50, d = 2)
+
+genes_df %>% 
+  mutate(kraskov_dens = kraskov_dens, true_dens = true_dens) %>% 
+  mutate(diff = kraskov_dens - true_dens) %>% summarise(mean = mean(diff))
+```
+

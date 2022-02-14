@@ -1,0 +1,35 @@
+---
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: '3'
+header-includes: \usepackage{float} \floatplacement{figure}{H} \floatplacement{table}{H}
+geometry: "left=4cm,right=4cm,top=4cm,bottom=4cm"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+# Theory
+
+## ScTransform
+
+
+
+# Method
+
+# Application
+
+# Results
+
+# Discussion
+
+# References
+Hafemeister, C., & Satija, R. (2019). Normalization and variance stabilization of single-cell RNA-seq data using regularized negative binomial regression. \textit{Genome Biology 20}(296 #This is the article number. Also, Can't find page numbers.), https://doi.org/10.1186/s13059-019-1874-1
+
