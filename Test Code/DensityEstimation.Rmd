@@ -14,56 +14,169 @@ library(MASS)
 library(tidyverse)
 library(spatstat)
 library(dbscan)
+library(png)
+library(mvtnorm)
 ```
 
+Sample from GMM similar to OSMfish data.
 ```{r}
 set.seed(931031)
 
-nr_clusters <- 60
-tot_genes <- 150000
+clusters = 6000
+avg_genes = 200
+cellwidth = 11.6
+  ## A function to create a dataframe consisting of a GMM sample
+  ## comparable to some in-situ sample
+  
+  # :Param clusters: Decides the number of cells
+  # :Param avg_genes: Average number of genes per cell
+  # :Param cellwidth: Used as component variance in covariance matrix (cell width in um)
 
-#600 different mean vectors (600 different gaussians in GMM)
-mu <-cbind(runif(nr_clusters, 0, 2000), runif(nr_clusters, 0, 3000))
-
-#Constant covariance matrix. 11.6um per cell
-Cov <- matrix(c(11.6, 0, 0, 11.6), nrow = 2, ncol = 2)
-
-#Decide which gaussian to sample from (same probabilities)
-GMM_sample <- sample.int(nr_clusters, tot_genes, replace = TRUE) %>% 
-  table()
-
-# Create Sample from GMM
-gene_coord <- matrix(NA, ncol = 3, nrow = 0)
-for (i in 1:nr_clusters){
-  point <- cbind(i, mvrnorm(n = GMM_sample[i], mu = mu[i, ], Sigma = Cov))
-  gene_coord <- rbind(gene_coord, point)
-}
-genes_df <- gene_coord %>% 
-  as_tibble() %>% 
-  rename(c("Gaussian" = i, "x" = V2, "y" = V3)) %>% 
-  mutate(Gaussian = as.factor(Gaussian))
+  #600 different mean vectors (600 different gaussians in GMM)
+  mu <-cbind(runif(clusters, 0, 2000), runif(clusters, 0, 3000))
+  #Constant covariance matrix. 11.6um per cell
+  Cov <- matrix(c(cellwidth, 0, 0, cellwidth), nrow = 2, ncol = 2)
+  #Decide which gaussian to sample from (same probabilities)
+  GMM_sample <- sample.int(clusters, clusters*avg_genes, replace = TRUE) %>% 
+    table()
+  # Create Sample from GMM
+  gene_coord <- matrix(NA, ncol = 2, nrow = 0)
+  true_dens <- matrix(NA, ncol = 1, nrow = 0)
+  kraskov_dens <- matrix(NA, ncol = 1, nrow = 0)
+  for (i in 1:length(GMM_sample)){
+    k <- names(GMM_sample)[i] %>% factor()
+    mu1 <- mu[k, ]
+    point <- mvrnorm(n = GMM_sample[i], mu = mu1, Sigma = Cov)
+    gene_coord <- rbind(gene_coord, point)
+    true_dens <- c(true_dens, dmvnorm(point, mean = mu1, sigma = Cov))
+  }
 ```
+
+
+Density estimation and comparison
+```{r}
+#Calculate the kraskov density estimation
+kraskov_estim <- function(x, N, k, d){
+  exp(digamma(k) - digamma(N) - d*log(2*nndist(x, k = k)) - log(pi^(d/2)/gamma(1 + d/2)))
+}
+
+kraskov_dens <- kraskov_estim(gene_coord, N = nrow(gene_coord), k = 7, d = 2)
+
+cor.test(rank(kraskov_dens), rank(true_dens), method = 'spearman')
+
+rank_comparison <- ggplot(as_tibble(cbind(rank(-kraskov_dens), rank(-true_dens))), aes(x = V1, y = V2)) +
+    geom_density_2d_filled(contour_var = 'ndensity') +
+  labs(title = "Kraskov vs True Rank: Clusters = 6000, N = 1.2M, Var = 11.6",
+       x = "Kraskov Rank",
+       y = "True Rank")
+ggsave(filename = "rank_comparison.png")
+```
+
+Using Gaussian Kernel with bandwidth 2.5
 
 ```{r}
-# Multivariate gaussian density function
-multivariate_gaussian <- function(X, mu, Sigma){
-  (det(Sigma*2*pi))^(-1/2) * exp(-1/2 * (t(as.matrix(X-mu))) %*% solve(Sigma) %*% (as.matrix((X-mu))))
+kernel <- function(x, h){
+  1/(2*pi*h^2) * exp(-1/2 * (x/h)^2)
 }
 
-#Calculate true density of each gene
-true_dens <- as.matrix(NA)
-for (i in 1:nrow(gene_coord)) {
-  true_dens[i] <- multivariate_gaussian(X = gene_coord[i, 2:3], mu = mu[gene_coord[i, 1], ], Sigma = Cov)
-}
+#Calculate euclidean distance to all k-nearest neighbors (list with each gene-type in the list)
+knn_distance <- kNNdist(gene_coord, k = 7, all = TRUE)
 
-#Calculate the kraskov density estimation
-kraskov_estim <- function(x, k, d){
-  exp(digamma(k) - digamma(tot_genes) - d*log(2*nndist(x, k = k)) - log(pi^(d/2)/gamma(1 + d/2)))
-}
-kraskov_dens <- kraskov_estim(gene_coord[,2:3], k = 50, d = 2)
+kde_dens <- kernel(knn_distance, h = 2.5) %>% 
+  rowSums()
 
-genes_df %>% 
-  mutate(kraskov_dens = kraskov_dens, true_dens = true_dens) %>% 
-  mutate(diff = kraskov_dens - true_dens) %>% summarise(mean = mean(diff))
+cor.test(rank(-kde_dens),rank(-true_dens), method = "spearman")
+
+kde_vs_true <- ggplot(as_tibble(cbind(rank(-kde_dens), rank(-true_dens))), aes(x = V1, y = V2)) +
+    geom_density_2d_filled(contour_var = 'ndensity') +
+  labs(title = "KDE vs True Rank: Clusters = 6000, N = 1.2M, Var = 11.6",
+       x = "KDE Rank",
+       y = "True Rank")
+ggsave(filename = "rank_comparison_kde.png")
+
 ```
 
+
+
+Spearman vs N
+
+```{r}
+n <- c(5, 100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000, 3000000)
+spearman_ranks <- c()
+clusters = 6000
+for (j in 1:length(n)){
+  #Decide which gaussian to sample from (same probabilities)
+  GMM_sample2 <- sample.int(clusters, n[j], replace = TRUE) %>% 
+    table()
+  # Create Sample from GMM
+  gene_coord2 <- matrix(NA, ncol = 2, nrow = 0)
+  true_dens2 <- matrix(NA, ncol = 1, nrow = 0)
+  kraskov_dens2 <- matrix(NA, ncol = 1, nrow = 0)
+  for (i in 1:length(GMM_sample2)){
+    k <- names(GMM_sample2)[i] %>% factor()
+    mu2 <- mu[k, ]
+    point2 <- rmvnorm(n = GMM_sample2[i], mean = mu2, sigma = Cov)
+    gene_coord2 <- rbind(gene_coord2, point2)
+    true_dens2 <- c(true_dens2, dmvnorm(point2, mean = mu2, sigma = Cov))
+  }
+
+  kraskov_dens2 <- kraskov_estim(gene_coord2, N = n[j], k = 7, d = 2)
+  spearman_ranks[j] <- cor.test(rank(-true_dens2), rank(-kraskov_dens2), method = "spearman", ties.method = "average")$estimate
+}
+
+ggplot(as_tibble(n, spearman_ranks), aes(x = n, y = spearman_ranks)) +
+  geom_point()
+
+spearman_ranks
+```
+
+
+
+
+
+
+Check if kras can find number of modes
+```{r}
+mu_1 <- c(-3, -3)
+mu_2 <- c(-3, 3)
+mu_3 <- c(3, -3)
+mu_4 <- c(3, 3)
+sigma <- matrix(c(1, 0, 0, 1), nrow = 2, ncol = 2)
+n1 <- 1000
+n2 <- 1000
+n3 <- 1000
+n4 <- 1000
+
+gauss1 <- rmvnorm(n1, mu_1, sigma)
+gauss2 <- rmvnorm(n2, mu_2, sigma)
+gauss3 <- rmvnorm(n3, mu_3, sigma)
+gauss4 <- rmvnorm(n4, mu_4, sigma)
+data <- rbind(gauss1, gauss2, gauss3, gauss4)
+kras1 <- kraskov_estim(data, N = nrow(data), k = 7, d = 2)
+
+as_tibble(cbind(x = data, kras_dens = rank(kras1), true_dens = rank(c(dnorm(gauss1, mu_1, sd = sqrt(11.6)), dnorm(gauss2, mu_2, sd = sqrt(11.6)))))) %>% 
+  gather("type", "value", -x) %>% 
+  ggplot(aes(x = x, y = value, col = type)) +
+  geom_smooth()
+
+
+ggplot(as_tibble(cbind(x = data, dens = kras1)), aes(x = x, y = dens)) +
+      geom_density_2d_filled(contour_var = 'ndensity')
+
+ggplot(as_tibble(cbind(x = data, y = rank(c(dnorm(gauss1, mu_1, sd = sqrt(11.6)), dnorm(gauss2, mu_2, sd = sqrt(11.6)))))), aes(x = x, y = y)) +
+  geom_density2d_filled(contour_var = "ndensity")
+
+
+df <- as_tibble(cbind(x = data[,1], y = data[,2], dens = kras1))
+
+ggplot(df, aes(x = x, y = y, col = dens)) +
+  geom_point()
+```
+
+Use rank instead of density since kraskov estimates lower always
+Use rank to check if it is only a systematic error
+
+Check how many modes because gaussians could overlap
+
+Do a graph with x-axis = N, y axis = spearman rank coefficient 
+Rank=: rank between each point, i.e. how large their density is.
