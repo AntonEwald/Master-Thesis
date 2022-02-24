@@ -65,7 +65,7 @@ kraskov_estim <- function(x, N, k, d){
 
 kraskov_dens <- kraskov_estim(gene_coord, N = nrow(gene_coord), k = 7, d = 2)
 
-cor.test(rank(kraskov_dens), rank(true_dens), method = 'spearman')
+kras_spearman <- cor.test(rank(kraskov_dens), rank(true_dens), method = 'spearman')$estimate
 
 rank_comparison <- ggplot(as_tibble(cbind(rank(-kraskov_dens), rank(-true_dens))), aes(x = V1, y = V2)) +
     geom_density_2d_filled(contour_var = 'ndensity') +
@@ -89,7 +89,7 @@ knn_distance <- kNNdist(gene_coord, k = 7, all = TRUE)
 kde_dens <- kernel(knn_distance, h = 2.5) %>% 
   rowSums()
 
-cor.test(rank(kde_dens),rank(true_dens), method = "spearman")
+kde_spearman <- cor.test(rank(kde_dens),rank(true_dens), method = "spearman")$estimate
 
 kde_vs_true <- ggplot(as_tibble(cbind(rank(-kde_dens), rank(-true_dens))), aes(x = V1, y = V2)) +
     geom_density_2d_filled(contour_var = 'ndensity') +
@@ -100,6 +100,11 @@ ggsave(filename = "rank_comparison_kde.png")
 ```
 
 
+Spearman for kras and kde
+
+```{r}
+cbind(kraskov = kras_spearman, KDE = kde_spearman)
+```
 
 Spearman vs N
 
@@ -169,7 +174,8 @@ cellwidth = 11.6
     mu1 <- mu[k, ]
     eps1 <- rnorm(1, 0, 1)
     eps2 <- rnorm(1, 0, 1)
-    Cov_diff <- matrix(c(sqrt(cellwidth) + eps1, eps2, eps2, sqrt(cellwidth) + eps1), nrow = 2, ncol = 2)
+    eps3 <- rnorm(1, 0, 1)
+    Cov_diff <- matrix(c(sqrt(cellwidth) + eps1, eps3, eps3, sqrt(cellwidth) + eps2), nrow = 2, ncol = 2)
     point_diff <- mvrnorm(n = GMM_sample[i], mu = mu1, Sigma = t(Cov_diff) %*% Cov_diff)
     gene_coord_diff <- rbind(gene_coord_diff, point_diff)
     true_dens_diff <- c(true_dens_diff, dmvnorm(point_diff, mean = mu1, sigma = Cov_diff))
@@ -296,25 +302,11 @@ sparse_data %>%
 
 
 
-Plots over kde vs true density and kraskov vs true density
-
-```{r}
-
-ggplot(as_tibble(cbind(kde_dens, true_dens)) %>% 
-                   sample_frac(0.1), aes(x = kde_dens, y = true_dens)) + 
-  geom_point() +
-  xlim(0,0.25) +
-  ylim(0,0.25)
 
 
-ggplot(as_tibble(cbind(kraskov_dens, true_dens)) %>% 
-                   sample_frac(0.1), aes(x = kraskov_dens, y = true_dens)) + 
-  geom_point() +
-  xlim(0, 0.014) +
-  ylim(0, 0.014)
 
 
-```
+-____________________________________________________________________________________________________________-
 
 
 
