@@ -11,49 +11,84 @@ geometry: "left=4cm,right=4cm,top=4cm,bottom=4cm"
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-# Introduction
-
-<<<<<<< HEAD
-
 \begin{itemize}
   \item 3 Different methods currently
   \item 1 NN (hard to interpret), 1 Bayesian (Cell-Segmentations), 1 density based (Segmentation-free)
   \item Use structure of SSAM but improve on methods in each section
 \end{itemize}
 
-# Theory
-
+\section{Introduction}
 \begin{itemize}
-  \item 
+    \item Mention the larger project, what is this study going to be used for?
+    \item 
+    \item Mention SSAM, Bayzor, Spage2Vec
+    \item 
 \end{itemize}
 
-## ScTransform
+\section{Method and Theory}
 
+\textcolor{red}{Should I mention SSAM? And then in each step say e.g. they use gaussian kernel with fixt bandwidth but we want an adaptive density estimation so we do...?}
+Structure of the method:
+\begin{enumerate}
+    \item Get genes from tissues as coordinates in 2-D (similar to GMM)
+    \item Pointwise density estimations
+    \begin{itemize}
+        \item Tried one of the most known parameter free estimations (Kraskov et. al).
+        \begin{itemize}
+             \item Cons: We don't have normalized density estimation or a density function. We use Rank. The rank only depends on the distance to the k:th nearest neighbor
+        \item Generalization: Use one of two estimates that make use of all neighbors $1, 2, ..., k$.
+        \end{itemize}
+        \item Method 1: $\rho_1(i) = 1/\sum_{j = 1}^k d_{ij}$, where $d_{ij}$ is the euclidean distance from point $i$ to point $j$ and $k$ is the number of nearest neighbors. We must fix $k$
+        \textcolor{red}{How do we decide on k?}
+        \item Method 2: $\rho_2(i) = d_i/vol(V)$ which is the stationary distribution in a similarity graph. Here $d_i = \sum_{j=1}^n \omega_{ij}$ where $\omega_{ij} = \frac{1}{d_{ij}^2 + 1}$ and $vol(V)$ is the sum of $d_i$. We only use ranks so $vol(V)$ does not contribute. 
+    \end{itemize}
+    \item Some down sampling or local maximum finder \textcolor{red}{How do we find the local maximums? Depends on normalization process.}
+    \begin{itemize}
+                \item Compared estimated mode and true mode from generated data. Check how well density estimators preserve spatial information of cluster modes I check how many neighbors away from the true cluster mode the estimated mode is.
+                \item Figure: Distribution of k from previous point shows peak close to 0 decaying quickly (good).
+                \item Further checks: Statistic from SASNE paper.
+                \item Method 1 seems to perform better (very slightly)
+    \end{itemize}
+    \item \textcolor{red}{Check distribution of "True Mode" - "Estimated Mode", i.e. a plot around origo. Are the Estimated Modes biased? I.e. do they always lie to the left of the true mode. Or above? How about variance?}
+    \item \textcolor{red}{How does the gaussians generated look like? Does it look good? Bias? Variance?}
+    \item Normalization of gene count in maximum
+    \begin{itemize}
+        \item Standard is sctransform.
+        \item Cons: It makes a lot of assumption that do not necessarily hold. e.g. linearity between gene count and sequencing depth (might hold in sc-analysis but not in-situ since and same $r$ in negative binomial for every cell (probably not true).
+        \item Assumption that each local maximum vector is the same as a cell. \textcolor{red}{Can we really assume this?}
+        \item Sequencing depth and gene count have correlation in sc-sequencing which needs to be normalized. For in-situ we do not do sequencing. \textcolor{red}{Do we need to normalize for sequencing depth? Should we normalize for something else that affects gene count for in-situ samples instead?}
+        \item \textcolor{red}{We need another method for this}
+    \end{itemize}
+    \item Clustering
+    \begin{itemize}
+        \item \textcolor{red}{Some density based clustering method with soft clustering}
+    \end{itemize}
+    
+\end{enumerate}
 
+\bigskip
+
+Notes: 
 \begin{itemize}
-  \item 
+    \item We have several types of genes. When doing density estimation and finding local maximums we bulk them all together. Afterwards they should be separate.
+    \item Pros: Less issue with sparse areas which could be an issue when we do pointwise density estimations.
+    \item Cons: Could this implement bias by favoring cells containing genes with high count? \textcolor{red}{Does all cells have same total gene count? Probably not. Then maybe we miss some local max in favor or cells with high gene count}.
 \end{itemize}
 
-# Method
-
-
-\begin{itemize}
-  \item 
-\end{itemize}
-
-# Results/Application
-
+\section{Results}
 
 \begin{itemize}
-  \item 
+    \item Test entire pipeline on GMM generated data.
+    \begin{itemize}
+        \item How many clusters can we find?
+        \item Try generate data from GMM but with different types of genes mimicing real cells. How well is the transcriptomics preserved by the model?
+        \item Test the method on benchmark data e.g. osmFish
+        \item \textcolor{red}{Test on SciLifeLab data?}
+        \item \textcolor{orange}{Interpret and explain why results are as they are!!}
+    \end{itemize}
 \end{itemize}
 
-# Discussion
 
-
-\begin{itemize}
-  \item 
-\end{itemize}
 
 # References
 
@@ -64,21 +99,3 @@ knitr::opts_chunk$set(echo = FALSE)
 (Bayzor): Petukhov, V., Xu, R.J., Soldatov, R.A. et al. Cell segmentation in imaging-based spatial transcriptomics. Nat Biotechnol (2021). https://doi.org/10.1038/s41587-021-01044-w
 
 (SSAM): Park, J., Choi, W., Tiesmeyer, S. et al. Cell segmentation-free inference of cell types from in situ transcriptomics data. Nat Commun \textbf{12}, 3545 (2021). https://doi.org/10.1038/s41467-021-23807-4
-=======
-# Theory
-
-## ScTransform
-
-
-
-# Method
-
-# Application
-
-# Results
-
-# Discussion
-
-# References
-Hafemeister, C., & Satija, R. (2019). Normalization and variance stabilization of single-cell RNA-seq data using regularized negative binomial regression. \textit{Genome Biology 20}(296 #This is the article number. Also, Can't find page numbers.), https://doi.org/10.1186/s13059-019-1874-1
-
