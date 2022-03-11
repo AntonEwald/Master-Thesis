@@ -45,6 +45,13 @@ data <- df %>%
 ggplot(data, aes(x = x, y = y, col = Cluster)) + 
   geom_point()
 ################################################################################################
+<<<<<<< HEAD
+
+colSums(gene_count)/6700
+
+
+=======
+>>>>>>> e4fc3c278da3f34fb15f1b36be90da6d3f782bfe
 ```
 
 ```{r}
@@ -205,6 +212,52 @@ local_maximum_vec_field %>%
 
 ```
 
+<<<<<<< HEAD
+```{r}
+###################### Vector Field with count instead of density ############################
+
+count_genes_df <- map(gene_type_quant, ~mutate(all_genes_df[[.]], value = 1))
+rast_count <- map(gene_type_quant, ~rasterize(count_genes_df[[.]][,1:2], pixels, field = count_genes_df[[.]][4], fun = sum))
+vec_field_count <- map(gene_type_quant, ~getValues(rast_count[[.]]) %>% 
+                   as.data.frame() %>% 
+                   replace(is.na(.), 0))
+
+#Need better way to rename column
+for(i in gene_type_quant){
+  names(vec_field_count[[i]])[1] <- gene_names[i]
+}
+
+#The complete vectorfield. Each column contains the KDE of every pixel of a gene (From paper, pictures are stacked)
+full_vec_field_count <- do.call(cbind.data.frame, vec_field_count) %>% 
+  mutate(total_count = rowSums(.),
+         x = rep(0:(dim(pixels)[2]-1), length.out = n()),
+         y = rep(0:(dim(pixels)[1]-1),  each = dim(pixels)[2])) %>% 
+  rowid_to_column("PixelID")
+
+#Construct pixel matrix with kde values in each element of matrix to use for maximum_filter function for downsampling
+count_grid <- full_vec_field_count %>% 
+  dplyr::select(x, y, total_count) %>% 
+  spread(key = x, value = total_count) %>% 
+  dplyr::select(-y) %>% 
+  as.matrix()
+
+loc_max_vec_field_count <- full_vec_field_count %>% 
+  filter(PixelID %in% local_maximum_vec_field$PixelID)
+
+
+
+
+Func_form_plot <- loc_max_vec_field_count %>% 
+  dplyr::select(-c(x, y, PixelID)) %>% 
+  group_by(total_count) %>% 
+  summarise_at(., .funs = mean, .vars = gene_names) %>% 
+  gather(gene, avg_count, -total_count) %>% 
+  ggplot(aes(x = log10(total_count), y = log(avg_count), col = gene)) +
+  geom_smooth()
+ggsave("Functional_Form.png")
+```
+=======
+>>>>>>> e4fc3c278da3f34fb15f1b36be90da6d3f782bfe
 
 
 Done last time: I figured out how they used the maximum filter (they dont use local peak max!!). I applied it on the vector field and got a similar result as in the paper (code part of SSAM). They chopped off part of the x-axis so I did the same.

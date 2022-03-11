@@ -2,20 +2,69 @@
 output:
   pdf_document:
     number_sections: yes
-    toc: yes
     toc_depth: 3
-  word_document:
     toc: yes
-    toc_depth: '3'
 header-includes: \usepackage{float} \floatplacement{figure}{H} \floatplacement{table}{H}
 geometry: "left=4cm,right=4cm,top=4cm,bottom=4cm"
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 # Introduction
 
+<<<<<<< HEAD
+
+\begin{itemize}
+  \item 3 Different methods currently
+  \item 1 NN (hard to interpret), 1 Bayesian (Cell-Segmentations), 1 density based (Segmentation-free)
+  \item Use structure of SSAM but improve on methods in each section
+\end{itemize}
+
+# Theory
+
+\begin{itemize}
+  \item 
+\end{itemize}
+
+## ScTransform
+
+
+\begin{itemize}
+  \item 
+\end{itemize}
+
+# Method
+
+
+\begin{itemize}
+  \item 
+\end{itemize}
+
+# Results/Application
+
+
+\begin{itemize}
+  \item 
+\end{itemize}
+
+# Discussion
+
+
+\begin{itemize}
+  \item 
+\end{itemize}
+
+# References
+
+(sctransform): Hafemeister, C., Satija, R. Normalization and variance stabilization of single-cell RNA-seq data using regularized negative binomial regression. Genome Biol \textbf{20}, 296 (2019). https://doi.org/10.1186/s13059-019-1874-1
+
+(Spage2Vec): Partel, G. & Wahlby, C. Spage2vec: Unsupervised representation of localized spatial gene expression signatures. FEBS J, \textbf{288}, 1859–187 (2021). https://doi.org/10.1111/febs.15572
+
+(Bayzor): Petukhov, V., Xu, R.J., Soldatov, R.A. et al. Cell segmentation in imaging-based spatial transcriptomics. Nat Biotechnol (2021). https://doi.org/10.1038/s41587-021-01044-w
+
+(SSAM): Park, J., Choi, W., Tiesmeyer, S. et al. Cell segmentation-free inference of cell types from in situ transcriptomics data. Nat Commun \textbf{12}, 3545 (2021). https://doi.org/10.1038/s41467-021-23807-4
+=======
 # Theory
 
 ## ScTransform

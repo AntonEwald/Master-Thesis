@@ -1,0 +1,180 @@
+---
+title: "DensityEstimation2"
+author: "Anton Holm"
+date: '2022-03-09'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(mvtnorm)
+library(MASS)
+library(dbscan)
+library(foreach)
+```
+
+```{r, eval = FALSE}
+#### Generates a GMM data sample ####
+ # No need to run this code
+source("..\\Generate_Data_Script.R")
+gauss <- generate_data(n = 1500000, clusters = 6000, cellwidth = 11.6)
+# saveRDS(gauss, file = "GMM_data.rdata")
+######################################
+```
+
+```{r}
+#### Load the saved data ####
+GMM_data <- readRDS("GMM_data.rdata")
+GMM_coordinates <- GMM_data[[1]]
+True_density <- GMM_data[[2]]
+True_rank <- rank(GMM_data[[2]])
+mu <- GMM_data[[3]]
+
+#Elements are d_ij
+  #Adjacency_Matrix <- kNNdist(GMM_coordinates, k = 7, all = TRUE)
+  #saveRDS(Adjacency_Matrix, file = "Adjacency_Matrix.rda")
+Adjacency_Matrix <- readRDS("ADjacency_Matrix.rda")
+##############################
+```
+
+```{r}
+#### Density Estimation 1 ####
+#Density = 1/sum_j(d_ij)
+Density_Vector1 <- 1/rowSums(Adjacency_Matrix)
+Ranks1 <- rank(Density_Vector1)
+
+#Spearman Correlation Test
+cor.test(True_rank, Ranks1, method = "spearman")
+##############################
+```
+
+```{r}
+#### Density Estimation 2 ####
+# Density = 1/(1+sum_j(d_ij)^2)
+Density_vector2 <- 1/(1 + rowSums(Adjacency_Matrix^2))
+Ranks2 <- rank(Density_vector2)
+
+cor.test(True_rank, Ranks2, method = "spearman")
+##############################
+```
+
+Code to find how many neighbors away our estimated mode is from the true mode
+```{r}
+#### Check which K-nearest neighbor to true mode that have largest density ####
+############# Don't Run #############
+
+#Function to calculate euclidean distance
+Euclidean_Distance <- function(x1, x2){
+  sqrt(sum((x1-x2)^2))
+}
+
+#Construct list with distance to true mode
+Dist_to_mode_list <- list()
+for (i in 1:300){
+  Dist_to_mode_list[[i]] <- cbind(1:nrow(GMM_coordinates), apply(GMM_coordinates, MARGIN = 1, FUN = function(x) sqrt(sum((x[]-mu[i,])^2))), Density_Vector1, Density_vector2)
+  print(i)
+}
+
+#Subset above list to only keep points close enough to the true mode (Datapoint ID, Distance to a true mode, Density Estimation, datapoints k-NN index of true mode)
+List_close_to_mode <- lapply(Dist_to_mode_list, function(x) x[x[,2] < 3*sqrt(11.6), ]) %>% 
+  lapply(function(x) x[order(x[,2], decreasing = FALSE), ] %>% cbind(1:nrow(x)))
+
+saveRDS(List_close_to_mode, file = "List_close_to_mode.rdata")
+#################################################################################
+```
+
+```{r}
+#### Analyze how well mode estimations are preserved spatially ####
+# Load saved List above
+Local_distances <- readRDS("List_close_to_mode.rdata")
+
+# Construct dataframe with all estimated modes and spatial information
+List_of_estimated_modes1 <- lapply(Local_distances, function(x) x[which.max(x[,3]),]) 
+List_of_estimated_modes2 <- lapply(Local_distances, function(x) x[which.max(x[,4]),])
+
+Local_distances_df <- as_tibble(do.call(rbind, List_of_estimated_modes1)) %>% 
+  rename(c("Datapoint ID" = V1, "Distance to mode" = V2, "Density Estimation" = Density_Vector1, "KNN index" = V5)) %>% 
+  mutate(`KNN index2` = as_tibble(do.call(rbind, List_of_estimated_modes2))$V5) 
+
+local_ranking_df <- Local_distances_df  %>% 
+  mutate(`KNN index2` = as_tibble(do.call(rbind, List_of_estimated_modes2))$V5) %>% 
+  rename("Density Estimation2" = Density_vector2) %>% 
+  gather(`Density Estimator`, `Density Estimation`, -c(`Datapoint ID`, `Distance to mode`, `KNN index`, `KNN index2`)) %>% 
+  dplyr::select(-c(`KNN index`, `KNN index2`)) %>% 
+  mutate(`KNN Index` = c(Local_distances_df$`KNN index`, Local_distances_df$`KNN index2`))
+
+#Spatial distribution of estimated modes  
+local_ranking_df %>% 
+  ggplot(aes(x = `KNN Index`, col = `Density Estimator`)) +
+  geom_density() +
+  labs(title = "Distribution of which k-NN of true mode is the estimated mode Estimation 1")
+
+#Shows distribution of the distance of estimated mode to the true mode
+local_ranking_df %>% 
+  ggplot(aes(x = `Distance to mode`)) +
+  geom_density()
+# An example of points around one mode
+# Shows estimated density against KNN index towards the true mode
+ggplot(data = NULL) +
+  geom_point(aes(x = Local_distances[[1]][,5], y = Local_distances[[1]][,3])) +
+  labs(x = "KNN index", y = "Density Estimation", title = "Density Estimation vs KNN index of true mode")
+#####################################################################
+```
+
+Code to plot how estimated mode lies from the perspective of the true mode
+```{r}
+df <- GMM_coordinates[Local_distances_df$`Datapoint ID`,] - mu[1:length(Local_distances_df$`Datapoint ID`),] %>% 
+  as_tibble() %>% 
+  rename("x" = V1, "y" = V2)
+  
+df %>% ggplot(aes(x = x, y = y)) +
+  geom_point()
+
+#Bias per coordinate
+df %>% colMeans()
+#Sd of each coordinate
+sd(df$x)
+sd(df$y)
+#Cov(x, y)
+cov(df$x, df$y)
+
+#1-D Distribution of the x and y coordinates in true mode - estimated mode
+#They are clearly gaussian
+ggplot(data = NULL) +
+  geom_density(aes(x = df$x))
+ggplot(data = NULL) +
+  geom_density(aes(x = df$y))
+```
+
+
+How does my gaussians look like?
+```{r}
+GMM_coordinates[1:243,] %>% 
+  as_tibble() %>% 
+  ggplot(aes(x = V1, y = V2)) + 
+  geom_point()
+
+sweep(GMM_coordinates[1:243,], 2, mu[1,]) %>% 
+  as_tibble() %>% 
+  colMeans()
+```
+
+Check the distance between every true mode
+
+Check bias and variance of the gaussians points
+THink of it as taking each true mode at origin and see how the points gets distributed
+
+For meeting:
+  - How do we decide on k?
+  - Show distribution of which k-NN was estimated as the mode
+  - How do we apply the rank spatial preservence statistics in our case?
+
+What I did last time:
+  - I checked the distribution of which neighbor to the true modes is the estimated mode for 1/sum(d_ij)
+
+Next:
+  - Do the same for stationary distribution aswell
