@@ -45,13 +45,6 @@ data <- df %>%
 ggplot(data, aes(x = x, y = y, col = Cluster)) + 
   geom_point()
 ################################################################################################
-<<<<<<< HEAD
-
-colSums(gene_count)/6700
-
-
-=======
->>>>>>> e4fc3c278da3f34fb15f1b36be90da6d3f782bfe
 ```
 
 ```{r}
@@ -69,7 +62,7 @@ um_per_pix <- 1/pix_per_um
 genes <- h5ls("osmFISHcoords.hdf5")
 gene_names <- genes$name
 #Genes as list of df
-all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x) %>% 
+  all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x) %>% 
                       mutate(V1 = V1 * um_per_pix, V2 = V2 * um_per_pix))
 #Genes in one df
 genes_coords <- all_genes_df %>% 
@@ -83,7 +76,7 @@ all_genes_matrix <- lapply(all_genes_matrix_unscaled, function(x) x*um_per_pix) 
 ```{r}
 ################################### Kernel Density Estimation ##################################
 #Calculate euclidean distance to all k-nearest neighbors (list with each gene-type in the list)
-knn_distance <- map(gene_type_quant, ~kNNdist(all_genes_matrix[[.x]], k = 50, all = TRUE))
+knn_distance <- map(gene_type_quant, ~kNNdist(all_genes_matrix[[.x]], k = 7, all = TRUE))
 #Apply kernel function and sum up distances
 kernel_knn_dist <- map(gene_type_quant, ~kernel(knn_distance[[.x]], h = 2.5))
 knn_kde <- map(gene_type_quant, ~rowSums(kernel_knn_dist[[.x]]))
@@ -201,6 +194,7 @@ local_maximum_vec_field <- full_vec_field %>%
   filter_at(vars(2:40), any_vars(. > 0.027)) %>% # Keep pixels with at least one gene higher density than 0.027 (from their code)
   filter(x < 350) #They removed part of the image using a mask. In practice, they chopped of part of the x-axis (the chopped part was used for testing stripping efficiency)
   
+saveRDS(local_maximum_vec_field, file = "local_maximum_vec_field.rda")
 #Make the plot of local maximum vectors as they did in SSAM (at code)
 local_maximum_vec_field %>% 
   ggplot(aes(x = x, y = y)) + 
@@ -208,11 +202,8 @@ local_maximum_vec_field %>%
   xlim(900, 0) +
   ylim(0, 900)
 ##############################################################################################
-
-
 ```
 
-<<<<<<< HEAD
 ```{r}
 ###################### Vector Field with count instead of density ############################
 
@@ -245,6 +236,7 @@ loc_max_vec_field_count <- full_vec_field_count %>%
   filter(PixelID %in% local_maximum_vec_field$PixelID)
 
 
+# saveRDS(loc_max_vec_field_count, file = "loc_max_vec_field_count.rdata")
 
 
 Func_form_plot <- loc_max_vec_field_count %>% 
@@ -253,11 +245,11 @@ Func_form_plot <- loc_max_vec_field_count %>%
   summarise_at(., .funs = mean, .vars = gene_names) %>% 
   gather(gene, avg_count, -total_count) %>% 
   ggplot(aes(x = log10(total_count), y = log(avg_count), col = gene)) +
-  geom_smooth()
+  geom_smooth() +
+  guides(col="none")
 ggsave("Functional_Form.png")
 ```
-=======
->>>>>>> e4fc3c278da3f34fb15f1b36be90da6d3f782bfe
+
 
 
 Done last time: I figured out how they used the maximum filter (they dont use local peak max!!). I applied it on the vector field and got a similar result as in the paper (code part of SSAM). They chopped off part of the x-axis so I did the same.
