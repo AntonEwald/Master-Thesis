@@ -141,6 +141,12 @@ Estimated_Mode_Statistics <- Estimated_vs_True %>%
 
 ggplot(Estimated_Mode_Statistics, aes(x = diff_x, y = diff_y, col = Method)) +
   geom_point()
+ggsave("Spatial_Dist_Estimated_Modes.png")
+
+ggplot(Estimated_Mode_Statistics, aes(x = diff_x, y = diff_y)) +
+  geom_point() +
+  facet_grid(~Method)
+ggsave("Spatial_Dist_Estimated_Modes_seperate.png")
 
 Estimated_Mode_Statistics %>% 
   group_by(Method) %>% 
