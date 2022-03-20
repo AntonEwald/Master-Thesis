@@ -1,6 +1,6 @@
 #### Simulate Data ####
-
-generate_data <- function(n, clusters, cellwidth, tissue_x, tissue_y){
+library(MASS)
+Generate_GMM_Data <- function(n, clusters, tissue_x, tissue_y, Cellwidth, Mode){
   
   ## A function to create a dataframe consisting of a GMM sample
   ## comparable to some in-situ sample
@@ -11,9 +11,9 @@ generate_data <- function(n, clusters, cellwidth, tissue_x, tissue_y){
   # :Param tissue_x: Size of the tissue in mikrometers in x axis
   # :Param tissue_y: Size of the tissue in mikrometers in y axis
   # :Clust: different mean vectors (different gaussians in GMM)
+  # :Mode: 3 Modes (1 = fixt cellsize, 2 = only change size, 3 = change size and shape)
   mu <-cbind(runif(clusters, 0, tissue_x), runif(clusters, 0, tissue_y))
-  # Constant covariance matrix. 11.6um per cell
-  Cov <- matrix(c(cellwidth, 0, 0, cellwidth), nrow = 2, ncol = 2)
+  variance <- matrix(NA, nrow = n, ncol = 2)
   # Decide which gaussian to sample from (same probabilities)
   GMM_sample <- sample.int(clusters, n, replace = TRUE) %>% 
     table()
@@ -23,9 +23,21 @@ generate_data <- function(n, clusters, cellwidth, tissue_x, tissue_y){
   for (i in 1:length(GMM_sample)){
     k <- as.numeric(dimnames(GMM_sample)[[1]][i])
     mu1 <- mu[k, ]
+    eps1 <- runif(1, 1, 2*sqrt(Cellwidth))
+    eps2 <- runif(1, 1, 2*sqrt(Cellwidth))
+    # Varying covariance matrix.
+    if (Mode == 1){
+      Cov = matrix(c(Cellwidth, 0, 0, Cellwidth), nrow = 2, ncol = 2)
+    } else if (Mode == 2){
+      Cov = matrix(c(eps1, 0, 0, eps1), nrow = 2, ncol = 2)
+    } else {
+      Cov = matrix(c(eps1, 0, 0, eps2), nrow = 2, ncol = 2)
+    }
     point <- mvrnorm(n = GMM_sample[i], mu = mu1, Sigma = Cov)
     gene_coord <- rbind(gene_coord, point)
     true_dens <- c(true_dens, dmvnorm(point, mean = mu1, sigma = Cov))
+    variance[i, 1] <- eps1
+    variance[i, 2] <- eps2
   }
-  return(list(gene_coord, true_dens, mu, GMM_sample))
+  return(list(Coordinates = gene_coord, Density = true_dens, Mu = mu, Samples = GMM_sample, Variance = variance))
 }

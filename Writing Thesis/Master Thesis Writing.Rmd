@@ -62,6 +62,12 @@ Structure of the method:
     \item Clustering
     \begin{itemize}
         \item \textcolor{red}{Some density based clustering method with soft clustering}
+        \item Based on fast search paper.
+        \item rho = our density estimations
+        \item generalize cutoff point. Look at rho*delta^a and some constant.
+        \item Pick the constant where there is a plateue in the graph (bottom left of my picture from meeting)
+        \item Try different k in the KNN part. Pick a k where we find a plateue. 
+        \item When we have our cluster centers, check if any center has one of its k nearest neighbor in another cluster. If that is the case, k is too large.
     \end{itemize}
     
 \end{enumerate}
@@ -76,6 +82,17 @@ Notes:
 \end{itemize}
 
 \section{Results}
+
+\begin{itemize}
+  \item Estimated modes and compared with true modes (on different GMM data)
+  \item When I checked the distribution of the distance from the true mode to the estimated one, both knn methods had early peaks and the went down. Kde had the same but then another peak at 3sd (the border of the epsilon neighborhood I checked around each true mu). Therefor I redid the procedure with 2sd instead. The same happened at the border of the 2sd epsilon neighborhood instead now
+  \item Checked how far it was from the true mode that got bad estimate to the closest other true mode. This was always around the border of epsilon neighborhood. I.e. we take a gene from another cluster as our estimate
+\end{itemize}
+
+\begin{itemize}
+  \item I tried with different shape clusters aswell now. This gave good results for KNN. KDE got some estimated modes very far away. 
+\end{itemize}
+
 
 \begin{itemize}
     \item Test entire pipeline on GMM generated data.

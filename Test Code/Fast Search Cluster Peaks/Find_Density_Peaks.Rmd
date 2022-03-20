@@ -1,0 +1,117 @@
+---
+title: "Finding Density Peaks"
+author: "Anton Holm"
+date: '2022-03-19'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First we load the density estimator function and the data followed by calculating the densities.
+```{r}
+#Load Density Function
+source("..//Density_Estimation.R")
+#To generate data
+source("..//Generate_GMM_Data.R")
+
+x_tissue = 120
+clusters = round(x_tissue^2*3/2000)*5
+n = 250*clusters
+#Try with small dataset
+data <- Generate_GMM_Data(n = n, clusters = clusters, x_tissue, x_tissue*3/2, 11.6, 3)
+df <- data[[1]]
+#Load Data (fixt cellsize, small sample)
+#df <- readRDS("..//DE (250K genes, fixt cell size)//GMM_data_small_sample.rdata")[[1]]
+#Calculate Density with 2 KNN methods
+
+ggplot(df %>% as_tibble(), aes(x = V1, y = V2)) + geom_point()
+
+
+sample_vec <- c()
+for(i in 1:length(data$Samples)){
+  sample_vec <- c(sample_vec, rep(i, data$Samples[[i]][1]))
+}
+
+df %>% 
+  as_tibble() %>% 
+  mutate(Gaussian = as.factor(sample_vec)) %>% 
+  ggplot(aes(x = V1, y = V2, col = Gaussian)) +
+  geom_point(size = 1, alpha = 0.4) +
+  guides(col = "none")
+```
+
+
+Should we trim away quantiles from only rho or also delta?
+
+
+```{r}
+source("..//full_method.R")
+#Find rho, delta, a, cluster vs constant
+#statistics <- clust_vs_const(df, k = 7, estimator = 1)
+#saveRDS(statistics, file = "center_statistics(c = 110, x-tissue = 120, k = 7)")
+
+statistics <- readRDS("center_statistics(c = 110, x-tissue = 120, k = 7)")
+plot(statistics$coefs, type = "l")
+abline(v = 0.35)
+
+#Find ID of the centers
+centers <- cluster_centers(statistics$delta, statistics$rho, treshold = 0.35)
+
+ggplot(data = NULL, aes(x = df[,1], y = df[,2], col = as.factor(sample_vec))) +
+  geom_point(alpha = 0.4) +
+  geom_point(data = NULL, aes(x = df[centers, 1], y = df[centers, 2]), color = "red", size = 2)+
+  guides(col = "none") 
+```
+
+
+Now lets try this on osmFISH data
+```{r}
+library(rhdf5)
+#Number of different types of genes
+gene_type_quant <- 1:39
+#Proportions from data creator
+pix_per_um <- 15.3846
+um_per_pix <- 1/pix_per_um
+#Load data of all genes
+genes <- h5ls("..//SSAM Reconstructed//osmFISHcoords.hdf5")
+gene_names <- genes$name
+#Genes as list of df
+  all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("..//SSAM Reconstructed//osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x) %>% 
+                      mutate(V1 = V1 * um_per_pix, V2 = V2 * um_per_pix))
+#Genes in one df
+genes_coords <- all_genes_df %>% 
+  reduce(full_join, by = c("V1", "V2", "gene"))
+
+#Take small sample of data
+osm_subsamp <- genes_coords %>% 
+  group_by(gene) %>% 
+  sample_frac(0.005)
+osm_df <- osm_subsamp[,1:2] %>% 
+  as.matrix()
+
+# Find all statistics
+osm_statistics <- clust_vs_const(osm_df, k = 7, estimator = 2, track = TRUE)
+
+# Visualize to find constant
+plot(osm_statistics$coefs, type = "l")
+abline(v = 0.115)
+
+#All possible centers
+osm_centers <- cluster_centers(osm_statistics$delta, osm_statistics$rho, treshold = 0.115)
+length(osm_centers)
+
+ggplot(data = NULL, aes(x = osm_subsamp$V1, y = osm_subsamp$V2)) +
+  geom_point() +
+  geom_point(aes(x = osm_subsamp$V1[osm_centers], y = osm_subsamp$V2[osm_centers]), color = "red") +
+  scale_y_reverse() +
+  scale_x_reverse()
+
+ggplot(data = NULL, aes(x = osm_subsamp$V1[osm_centers], y = osm_subsamp$V2[osm_centers])) +
+  geom_point(color = "blue")+
+  scale_y_reverse() +
+  scale_x_reverse()
+```
+
+

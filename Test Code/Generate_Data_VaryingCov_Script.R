@@ -1,6 +1,6 @@
 #### Simulate Data ####
 
-generate_data <- function(n, clusters, cellwidth, tissue_x, tissue_y){
+generate_data_varyingCov <- function(n, clusters, tissue_x, tissue_y){
   
   ## A function to create a dataframe consisting of a GMM sample
   ## comparable to some in-situ sample
@@ -12,8 +12,6 @@ generate_data <- function(n, clusters, cellwidth, tissue_x, tissue_y){
   # :Param tissue_y: Size of the tissue in mikrometers in y axis
   # :Clust: different mean vectors (different gaussians in GMM)
   mu <-cbind(runif(clusters, 0, tissue_x), runif(clusters, 0, tissue_y))
-  # Constant covariance matrix. 11.6um per cell
-  Cov <- matrix(c(cellwidth, 0, 0, cellwidth), nrow = 2, ncol = 2)
   # Decide which gaussian to sample from (same probabilities)
   GMM_sample <- sample.int(clusters, n, replace = TRUE) %>% 
     table()
@@ -23,9 +21,13 @@ generate_data <- function(n, clusters, cellwidth, tissue_x, tissue_y){
   for (i in 1:length(GMM_sample)){
     k <- as.numeric(dimnames(GMM_sample)[[1]][i])
     mu1 <- mu[k, ]
+    eps <- runif(1, 1, 6)
+    # Varying covariance matrix.
+    Cov <- matrix(c(eps, 0, 0, eps), nrow = 2, ncol = 2)
     point <- mvrnorm(n = GMM_sample[i], mu = mu1, Sigma = Cov)
     gene_coord <- rbind(gene_coord, point)
     true_dens <- c(true_dens, dmvnorm(point, mean = mu1, sigma = Cov))
+    variance <- c(variance, eps)
   }
-  return(list(gene_coord, true_dens, mu, GMM_sample))
+  return(list(gene_coord, true_dens, mu, GMM_sample, variance))
 }
