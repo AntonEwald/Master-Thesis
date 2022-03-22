@@ -11,27 +11,24 @@ knitr::opts_chunk$set(echo = TRUE)
 
 First we load the density estimator function and the data followed by calculating the densities.
 ```{r}
-#Load Density Function
-source("..//Density_Estimation.R")
 #To generate data
 source("..//Generate_GMM_Data.R")
+source("..//full_method.R")
 
-x_tissue = 120
-clusters = round(x_tissue^2*3/2000)*5
-n = 250*clusters
-#Try with small dataset
-data <- Generate_GMM_Data(n = n, clusters = clusters, x_tissue, x_tissue*3/2, 11.6, 3)
-df <- data[[1]]
-#Load Data (fixt cellsize, small sample)
-#df <- readRDS("..//DE (250K genes, fixt cell size)//GMM_data_small_sample.rdata")[[1]]
-#Calculate Density with 2 KNN methods
+library(MASS)
 
-ggplot(df %>% as_tibble(), aes(x = V1, y = V2)) + geom_point()
+cluster = 80
+data <- Generate_GMM_Data(n = cluster*250, clusters = cluster, tissue_x = 150, tissue_y = 150*3/2, Cellwidth = 11.6, Mode = 3)
+
+Generate_GMM_Data()
+samples <- data_varying_size[[4]]
+
+
 
 
 sample_vec <- c()
-for(i in 1:length(data$Samples)){
-  sample_vec <- c(sample_vec, rep(i, data$Samples[[i]][1]))
+for(i in 1:length(samples)){
+  sample_vec <- c(sample_vec, rep(i, samples[[i]][1]))
 }
 
 df %>% 
@@ -47,28 +44,72 @@ Should we trim away quantiles from only rho or also delta?
 
 
 ```{r}
-source("..//full_method.R")
 #Find rho, delta, a, cluster vs constant
-#statistics <- clust_vs_const(df, k = 7, estimator = 1)
-#saveRDS(statistics, file = "center_statistics(c = 110, x-tissue = 120, k = 7)")
+#pctime <- proc.time()
+#statistics_large <- clust_vs_const(df, k = 7, estimator = 2, track = TRUE)
+#timeer = proc.time() - pctime
+#saveRDS(statistics_large, file = "center_statistics(c = 540, x-tissue = 600, k = 7)")
 
-statistics <- readRDS("center_statistics(c = 110, x-tissue = 120, k = 7)")
-plot(statistics$coefs, type = "l")
-abline(v = 0.35)
+statistics_large <- readRDS("center_statistics(c = 540, x-tissue = 600, k = 7)")
+plot(statistics_large$coefs, type = "l")
+abline(v = 0.08)
 
 #Find ID of the centers
-centers <- cluster_centers(statistics$delta, statistics$rho, treshold = 0.35)
+centers <- cluster_centers(statistics_large$delta, statistics_large$rho, treshold = 0.08)
 
-ggplot(data = NULL, aes(x = df[,1], y = df[,2], col = as.factor(sample_vec))) +
+estimated_modes <- ggplot(data = NULL, aes(x = df[,1], y = df[,2], col = as.factor(sample_vec))) +
   geom_point(alpha = 0.4) +
-  geom_point(data = NULL, aes(x = df[centers, 1], y = df[centers, 2]), color = "red", size = 2)+
+  geom_point(data = NULL, aes(x = df[centers, 1], y = df[centers, 2]), color = "red", size = 1)+
   guides(col = "none") 
+ggsave(estimated_modes, file = "estimated_modes(c = 540, x-tissue = 600, k = 7).png")
+
+
+
+true_modes <- data_varying_size[[3]]
+estimated_modes <- c(rep(NA, 25), df[centers, 1])
+estimated_modes2 <- c(rep(NA, 25), df[centers, 2])
+
+modes <- as_tibble(cbind(true_modes, estimated_modes, estimated_modes2)) %>% 
+  rowid_to_column() %>% 
+  mutate(rowid = as.factor(rowid))
+  
+
+ggplot(data = NULL, aes(x = modes$V1, y = modes$V2)) +
+  geom_point(color = "blue", alpha = 0.4) +
+  geom_point(aes(x = modes$estimated_modes, y = modes$estimated_modes2), color = "red", shape = "triangle", alpha = 0.4) +
+  theme_minimal()
+
 ```
+
+-----------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 Now lets try this on osmFISH data
+It will not work... Got to 68.000 in 2 hours. Will take days if not weeks for 2 million data
 ```{r}
 library(rhdf5)
+library(tidyverse)
 #Number of different types of genes
 gene_type_quant <- 1:39
 #Proportions from data creator
@@ -78,22 +119,28 @@ um_per_pix <- 1/pix_per_um
 genes <- h5ls("..//SSAM Reconstructed//osmFISHcoords.hdf5")
 gene_names <- genes$name
 #Genes as list of df
-  all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("..//SSAM Reconstructed//osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x) %>% 
+all_genes_df <- map(gene_names, ~as.data.frame(t(h5read("..//SSAM Reconstructed//osmFISHcoords.hdf5", .x))) %>% mutate(gene = .x) %>% 
                       mutate(V1 = V1 * um_per_pix, V2 = V2 * um_per_pix))
 #Genes in one df
 genes_coords <- all_genes_df %>% 
-  reduce(full_join, by = c("V1", "V2", "gene"))
+  reduce(full_join, by = c("V1", "V2", "gene")) %>% 
+  mutate(V1 = round(V1, 2), V2 = round(V2, 2))
 
-#Take small sample of data
-osm_subsamp <- genes_coords %>% 
-  group_by(gene) %>% 
-  sample_frac(0.005)
-osm_df <- osm_subsamp[,1:2] %>% 
+osm_df <- genes_coords[,1:2] %>% 
   as.matrix()
 
+pct <- proc.time()
 # Find all statistics
 osm_statistics <- clust_vs_const(osm_df, k = 7, estimator = 2, track = TRUE)
+time <- proc.time() - pct
 
+
+```
+
+
+
+
+```{r}
 # Visualize to find constant
 plot(osm_statistics$coefs, type = "l")
 abline(v = 0.115)

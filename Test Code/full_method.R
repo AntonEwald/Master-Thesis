@@ -34,28 +34,20 @@ calc_rho <- function(df, k = 7, estimator){
 calc_delta <- function(df, rho, track){
   
   delta <- matrix(NA, ncol = 2, nrow = nrow(df))
-  for (i in 1:nrow(df)){
-    data <- cbind(df, rho, 1:nrow(df))[order(rho, decreasing = TRUE),]
-    
-    if (i == 1) {
-      point <- data[1, 1:2]
-      distance <- apply(data[,1:2], 1, function(x) sqrt(sum((x - point)^2)))
-      delta[1, ] <- c(max(distance), data[1, 4])
-    }
-    
-    else if (i == 2) {
-      delta[2, ] <- c(sqrt(sum((data[1, 1:2] - data[2, 1:2])^2)), data[2, 4])
-    }
-    
-    else {
+  data <- cbind(df, rho, 1:nrow(df))[order(rho, decreasing = TRUE),]
+  point1 <- data[1, 1:2]
+  distance1 <- apply(data[,1:2], 1, function(x) sqrt(sum((x - point1)^2)))
+  delta[1, ] <- c(max(distance1), data[1, 4]) #First two points does not work in the Loop but are easy to do manually
+  delta[2, ] <- c(sqrt(sum((data[1, 1:2] - data[2, 1:2])^2)), data[2, 4])
+  for (i in 3:nrow(df)){
       point <- data[i, 1:2]
       distance <- apply(data[1:i-1, 1:2], 1, function(x) sqrt(sum((x - point)^2)))
       delta[i, ] <- c(min(distance), data[i, 4])
       
-      if (track == TRUE & i %% 200 == 0){
+      if (track == TRUE & i %% 500 == 0){
         print(i)
       }
-    }
+
   }
   return(delta[order(delta[,2])])
 }

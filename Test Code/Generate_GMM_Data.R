@@ -1,7 +1,7 @@
 #### Simulate Data ####
-library(MASS)
 Generate_GMM_Data <- function(n, clusters, tissue_x, tissue_y, Cellwidth, Mode){
-  
+  library(MASS)
+  library(Mvnorm)
   ## A function to create a dataframe consisting of a GMM sample
   ## comparable to some in-situ sample
   
