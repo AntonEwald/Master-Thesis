@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(loomR)
 library(tidyverse)
-library(rhdf5)
+library(hdf5r)
 library(MASS)
 library(dbscan)
 library(raster)
@@ -41,11 +41,15 @@ cell_id <- lfile$col.attrs$CellID[]
 data <- df %>% 
   mutate(CellID = cell_id, Cluster = as.factor(clusters), x = x, y = y) %>% 
   dplyr::select(CellID, Cluster, x, y, everything())
-
+saveRDS(data, file = "osmFish Clusters DF.rdata")
 ggplot(data, aes(x = x, y = y, col = Cluster)) + 
-  geom_point()
+  geom_point() +
+  scale_x_reverse() +
+  scale_y_reverse()
+  
 ################################################################################################
 ```
+df %>% 
 
 ```{r}
 ########################################## Load data ###########################################
@@ -67,6 +71,7 @@ gene_names <- genes$name
 #Genes in one df
 genes_coords <- all_genes_df %>% 
   reduce(full_join, by = c("V1", "V2", "gene"))
+saveRDS(genes_coords, file = "gene coordinates osmFISH DF.rdata")
 #list of matrices with coordinates of genes
 all_genes_matrix_unscaled <- map(gene_names, ~t(h5read("osmFISHcoords.hdf5", .x)))
 all_genes_matrix <- lapply(all_genes_matrix_unscaled, function(x) x*um_per_pix) #

@@ -1,7 +1,8 @@
 #### Simulate Data ####
 Generate_GMM_Data <- function(n, clusters, tissue_x, tissue_y, Cellwidth, Mode){
   library(MASS)
-  library(Mvnorm)
+  library(emdbook)
+  library(tidyverse)
   ## A function to create a dataframe consisting of a GMM sample
   ## comparable to some in-situ sample
   
@@ -35,9 +36,13 @@ Generate_GMM_Data <- function(n, clusters, tissue_x, tissue_y, Cellwidth, Mode){
     }
     point <- mvrnorm(n = GMM_sample[i], mu = mu1, Sigma = Cov)
     gene_coord <- rbind(gene_coord, point)
-    true_dens <- c(true_dens, dmvnorm(point, mean = mu1, sigma = Cov))
+    true_dens <- c(true_dens, emdbook::dmvnorm(point, mu = mu1, Sigma = Cov))
     variance[i, 1] <- eps1
     variance[i, 2] <- eps2
   }
-  return(list(Coordinates = gene_coord, Density = true_dens, Mu = mu, Samples = GMM_sample, Variance = variance))
+  sample_vec <- c()
+  for(i in 1:length(GMM_sample)){
+    sample_vec <- c(sample_vec, rep(i, GMM_sample[[i]][1]))
+  }
+  return(list(Coordinates = gene_coord, Density = true_dens, Mu = mu, Samples = as.factor(sample_vec), Variance = variance))
 }

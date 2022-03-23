@@ -63,10 +63,13 @@ clust_vs_const <- function(df, k = 7, estimator = 2, track = FALSE){
   rho = calc_rho(df, k, estimator)
   delta = calc_delta(df, rho, track)
   #Find slope of ln(rho) + a*ln(delta)
-  non_extreme <- which(delta > quantile(delta, 0.05) & delta < quantile(delta, 0.95))
-  delta_trimmed <- delta[non_extreme]
-  rho_trimmed <- rho[non_extreme]
-  a <- lm(log(delta_trimmed)~log(rho_trimmed))$coefficient[[2]]
+  
+  ## This is for outliers but not sure if we should use that yet
+  ##non_outliers <- which(rho/delta > quantile(rho/delta, 0.05))
+  ##delta_trimmed <- delta[non_outliers]
+  ##rho_trimmed <- rho[non_outliers]
+  
+  a <- lm(log(delta)~log(rho))$coefficient[[2]]
   #Find which constant to use for the decision line ln(rho) + a*ln(delta) = const
   const <-  seq(0, 1, by = 0.001)
   clusters <- c()
@@ -74,18 +77,27 @@ clust_vs_const <- function(df, k = 7, estimator = 2, track = FALSE){
   for (i in 1:length(const)){
     clusters[i] <- sum(delta > (const[i]*rho)^a)
   }
-  return(list(rho = rho, delta = delta, coefs = cbind(const, clusters), slope = a))
+  stats <- list(df = df, rho = rho, delta = delta, coefs = cbind(const, clusters), slope = a)
+  class(stats) <- 'fuzzyDensClust'
+  stats
+}
+
+# Decision Graph
+plot.fuzzyDensClust <- function(x, ...){
+  plot(x$coefs[,1], x$coefs[,2], type = "l", main = "Decision Graph", xlab = "Threshold", ylab = "Clusters")
 }
 
 
 #### Returns the ID of potential cluster centers
-cluster_centers <- function(delta, rho, treshold){
+clustering <- function(stats, threshold){
+  library(Rfast)
   #Find slope of ln(rho) + a*ln(delta)
-  non_extreme <- which(delta > quantile(delta, 0.05) & delta < quantile(delta, 0.95))
-  delta_trimmed <- delta[non_extreme]
-  rho_trimmed <- rho[non_extreme]
-  a <- lm(log(delta_trimmed)~log(rho_trimmed))$coefficient[[2]]
-  center_id = which(delta > (treshold*rho)^a)
-  return(centers = center_id)
+  delta = stats$delta
+  rho = stats$rho
+  a <- stats$slope
+  center_id = which(delta > (threshold*rho)^a)
+  cent_to_point_dist <- 1/(1+dista(stats$df[center_id,], stats$df))
+  assignments <- sweep(cent_to_point_dist, 2, colSums(cent_to_point_dist), "/")
+  return(list(centerID = center_id, assignments = assignments))
 }
 
