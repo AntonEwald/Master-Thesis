@@ -25,6 +25,14 @@ knitr::opts_chunk$set(echo = FALSE)
     \item 
 \end{itemize}
 
+\begin{itemize}
+  \item DATA:
+  \item I generate data by GMM, variance for x and y for each cluster are taken as 2 samples from uniform dist with parameter min = 3, max = 12
+  \item I decide on clusters (250 st)
+  \item Number of genes per cell is set by max(30, (area of 90% of theoretical data)*2 + random normal sample with mean 0, sd = 10) to get some variation.
+  \item Estimate where we have density peaks by starting at true mean, look at closest neighbors density estimation, second neighbor, third and so on. When we have K times in a row that the density goes down, we found our peak.
+\end{itemize}
+
 \section{Method and Theory}
 
 \textcolor{red}{Should I mention SSAM? And then in each step say e.g. they use gaussian kernel with fixt bandwidth but we want an adaptive density estimation so we do...?}
@@ -32,6 +40,7 @@ Structure of the method:
 \begin{enumerate}
     \item Get genes from tissues as coordinates in 2-D (similar to GMM)
     \item Pointwise density estimations
+    \item SSAM do KDE. If bandwidth too large we might get shortcircuits in density estimate for KDE (e.g. in osmFish data at the far right of the bottom part where we have like stairs we might add points from upper stair to the density of a point from the lower stair). Knn is more adaptive.
     \begin{itemize}
         \item Tried one of the most known parameter free estimations (Kraskov et. al).
         \begin{itemize}

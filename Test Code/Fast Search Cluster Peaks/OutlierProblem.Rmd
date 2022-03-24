@@ -1,0 +1,105 @@
+---
+title: "Outlier Problem"
+author: "Anton Holm"
+date: '2022-03-24'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#### Load and look at data ####
+
+#Load Data
+data1 <- readRDS("GMM c=80, tissue x = 150, Mode = 3.rdata")
+df1 <- data1$Coordinates
+#Plot the data
+df1 %>% 
+  as_tibble() %>% 
+  mutate(Gaussian = as.factor(data1$Samples)) %>% 
+  ggplot(aes(x = V1, y = V2, col = Gaussian)) +
+  geom_point(size = 1, alpha = 0.4) +
+  guides(col = "none")
+################################
+
+#Find rho, delta and decision graph
+#statistics1 <- clust_vs_const(df1, k = 7, estimator = 2, track = TRUE)
+#saveRDS(statistics1, file = "center_stats(c = 80, tissue_x = 150, Width = 11.6, Mode = 3")
+
+# Find delta, rho and decision graph
+#####################################
+# Find centers
+
+#Decide on number of clusters and find centers
+statistics1 <- readRDS("center_stats(c = 80, tissue_x = 150, Width = 11.6, Mode = 3")
+plot(statistics1$coefs, type = "l")
+abline(v = 0.12)
+
+clusters1 <- clustering(statistics1, 0.1)
+
+#data + estimated cluster centers
+ggplot(data = NULL, aes(x = df1[,1], y = df1[,2], col = as.factor(sample_vec))) +
+  geom_point(alpha = 0.4) +
+  geom_point(data = NULL, aes(x = df1[clusters1$centerID, 1], y = df1[clusters1$centerID, 2]), color = "red", size = 1)+
+  guides(col = "none") 
+ggsave(file = "estimated_modes(c = 80, x_tissue = 150).png")
+
+
+######### Outlier Part ###########33
+non_outliers <-  which(statistics1$rho/statistics1$delta > quantile(statistics1$rho/statistics1$delta, 0.05))
+outliers <-  which(statistics1$rho/statistics1$delta <= quantile(statistics1$rho/statistics1$delta, 0.05))
+#Here we can see the outliers (red)
+ggplot(data = NULL, aes(x = log(statistics1$rho), y = log(statistics1$delta))) +
+  geom_point(color = "blue") +
+  geom_point(aes(x = log(statistics1$rho[outliers]), y = log(statistics1$delta[outliers])), color = "red")
+ggsave("4 Outliers Problem.png")
+```
+
+
+With outliers
+
+```{r}
+outliers2 <- cbind(runif(100, 0, 30), runif(100, 0, 30))
+
+df2_o <- rbind(data2$Coordinates, outliers2)
+stats2_o <- clust_vs_const(df2_o, k = 7, estimator = 2, track = TRUE)
+
+clusters_o <- clustering(stats2_o, 0.3)
+
+cluster_probs_o <- as_tibble(cbind(t(clusters_o$assignments), df2_o)) %>% 
+  rename("x" = V10, "y" = V11) %>% 
+  gather(Class, Value, -c(x, y))
+
+centers2_o <- as_tibble(df2_o[clusters_o$centerID, ]) %>% 
+  rename("x" = V1, "y" = V2)
+
+ggplot(cluster_probs_o, aes(x = x, y = y, col = Value)) +
+  geom_point() +
+  geom_point(data = centers2_o, aes(x = x, y = y), color = "green", size = 1) +
+  facet_wrap(~Class) +
+  scale_color_gradient(low = "blue", high = "red")
+
+
+
+########## More outlier analysis #############333
+### Still have the problem with removing high density points when removing outliers
+outliers_new2 <- which(stats2_o$rho/stats2_o$delta <= quantile(stats2_o$rho/stats2_o$delta, 0.05))
+outliers_mine2 <- which(stats2_o$rho <= quantile(stats2_o$rho, 0.05))
+
+#Decision plot with red = outlier according to rho/delta statistic
+ggplot(data = NULL, aes(x = log(stats2_o$rho), y = log(stats2_o$delta))) +
+  geom_point(color = "blue") +
+  geom_point(aes(x = log(stats2_o$rho[outliers_new2]), y = log(stats2_o$delta[outliers_new2])), color = "red")
+
+#Outliers according to rho/delta
+ggplot(data = NULL, aes(x = df2_o[,1], y = df2_o[,2], col = c(data2$Samples, rep("Outliers", 100)))) +
+  geom_point() +
+  geom_point(data = NULL, aes(x = df2_o[outliers_new2, 1], y = df2_o[outliers_new2, 2]), color = "black")
+
+#Outliers according to 5% lowest rho values
+ggplot(data = NULL, aes(x = df2_o[,1], y = df2_o[,2], col = c(data2$Samples, rep("Outliers", 100)))) +
+  geom_point() +
+  geom_point(data = NULL, aes(x = df2_o[outliers_mine2, 1], y = df2_o[outliers_mine2, 2]), color = "black")
+```

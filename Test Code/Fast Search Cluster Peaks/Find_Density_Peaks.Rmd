@@ -9,90 +9,53 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-First we load the density estimator function and the data followed by calculating the densities.
-```{r}
-source("..//full_method.R")
-source("..//Generate_GMM_Data.R")
-```
-
-WHole process for data with 80 clusters (n = 20.000)
-```{r}
-#### Load and look at data ####
-#Load Data
-data1 <- readRDS("GMM c=80, tissue x = 150, Mode = 3.rdata")
-df1 <- data1$Coordinates
-#Plot the data
-df1 %>% 
-  as_tibble() %>% 
-  mutate(Gaussian = as.factor(data1$Samples)) %>% 
-  ggplot(aes(x = V1, y = V2, col = Gaussian)) +
-  geom_point(size = 1, alpha = 0.4) +
-  guides(col = "none")
-################################
-
-#Find rho, delta and decision graph
-#statistics1 <- clust_vs_const(df1, k = 7, estimator = 2, track = TRUE)
-#saveRDS(statistics1, file = "center_stats(c = 80, tissue_x = 150, Width = 11.6, Mode = 3")
-
-# Find delta, rho and decision graph
-#####################################
-# Find centers
-
-#Decide on number of clusters and find centers
-statistics1 <- readRDS("center_stats(c = 80, tissue_x = 150, Width = 11.6, Mode = 3")
-plot(statistics1$coefs, type = "l")
-abline(v = 0.12)
-
-clusters1 <- clustering(statistics1, 0.1)
-
-#data + estimated cluster centers
-ggplot(data = NULL, aes(x = df1[,1], y = df1[,2], col = as.factor(sample_vec))) +
-  geom_point(alpha = 0.4) +
-  geom_point(data = NULL, aes(x = df1[clusters1$centerID, 1], y = df1[clusters1$centerID, 2]), color = "red", size = 1)+
-  guides(col = "none") 
-ggsave(file = "estimated_modes(c = 80, x_tissue = 150).png")
-
-
-######### Outlier Part ###########33
-non_outliers <-  which(statistics1$rho/statistics1$delta > quantile(statistics1$rho/statistics1$delta, 0.05))
-outliers <-  which(statistics1$rho/statistics1$delta <= quantile(statistics1$rho/statistics1$delta, 0.05))
-#Here we can see the outliers (red)
-ggplot(data = NULL, aes(x = log(statistics1$rho), y = log(statistics1$delta))) +
-  geom_point(color = "blue") +
-  geom_point(aes(x = log(statistics1$rho[outliers]), y = log(statistics1$delta[outliers])), color = "red")
-# Here are the graph with outliers removed. Now we changed the correlation from linear to non-linear.
- ggplot(data = NULL, aes(x = log(statistics1$rho)[non_outliers], y = log(statistics1$delta)[non_outliers])) +
-  geom_point()
-```
 
 
 Small dataset
 ```{r}
-#Get data
-data2 <- Generate_GMM_Data(n = 8*250, clusters = 8, tissue_x = 30, tissue_y = 30, Cellwidth = sqrt(11.6), Mode = 3)
+#### START ####
+source("..//full_method.R")
+#Load Data
+data2 <- readRDS("(DATA) GMM c = 8")
 #Rho, Delta, Slope, Decision Graph
-stats2 <- clust_vs_const(data2$Coordinates, k = 7, estimator = 2, track = TRUE)
+stats2 <- findStats(df = data2$Coordinates, k = 7, estimator = 2, track = FALSE)
 #Plot Decision Graph
 plot(stats2)
-clusters <- clustering(stats2, 0.3)
+clusters <- clustering(stats2, 0.2)
+```
 
 
+
+
+Some Analysis of the data with 8 clusters
+```{r}
+#Look at data
+ggplot(data = NULL, aes(x = data2$Coordinates[,1], y = data2$Coordinates[,2], col = data2$Samples)) +
+  geom_point()
+
+#Create plot to see soft clustering
 cluster_probs <- as_tibble(cbind(t(clusters$assignments), data2$Coordinates)) %>% 
-  rename("x" = V10, "y" = V11) %>% 
+  rename("x" = V9, "y" = V10) %>% 
   gather(Class, Value, -c(x, y))
-
 centers2 <- as_tibble(data2$Coordinates[clusters$centerID, ]) %>% 
   rename("x" = V1, "y" = V2)
-
 ggplot(cluster_probs, aes(x = x, y = y, col = Value)) +
   geom_point() +
-  geom_point(data = centers2, aes(x = x, y = y), color = "green", size = 1) +
+  geom_point(data = centers2, aes(x = x, y = y), color = "green", size = 1.5) +
   facet_wrap(~Class) +
   scale_color_gradient(low = "blue", high = "red")
 
-ggplot(data = NULL, aes(x = data2$Coordinates[,1], y = data2$Coordinates[,2], col = data2$Samples)) +
-  geom_point()
+#True vs Estimated peak
+ggplot(data = NULL) +
+  geom_point(aes(x = data2$Coordinates[clusters$centerID,1], y = data2$Coordinates[clusters$centerID, 2]), col = "blue") +
+  geom_point(aes(x = data2$Mu[,1], y = data2$Mu[,2]), col = "red")
+
+#Xie-Beni Index
+peak_to_peak2 <- dista(data2$Coordinates[clusters$centerID,], data2$Coordinates[clusters$centerID,])
+xb_small <- sum((1/ncol(clusters$assignments) * clusters$assignments * dista(data2$Coordinates[clusters$centerID,], data2$Coordinates)))/min(peak_to_peak2[which(peak_to_peak2 > 0)])
 ```
+
+
 
 Simulated GMM
 -----------------------------------------------------------------
@@ -102,10 +65,11 @@ osmFish data
 ------------------------------------------------------------------
 Notes
 
- - How do we fix computational time? Discretize might also be bad.
- - I can add noise to my GMM to get outliers
-!- If we use rho/delta and remove 5% lowest for outliers 2 bad things can happen. 1: We can remove density peaks. 2: We can remove the linear correlation between log(rho) and log(delta). See e.g. the plots in first codechunk. The reason it worked in the powerpoint is because the cluster centers delta is as big as outliers. If density centers have larger delta we have the problem I get above.
- - 
+ 
+ To Do:
+  - Add CTD
+  - Add Noise to the GMM as outliers
+  - Sök FOI jobbet
 
 
 

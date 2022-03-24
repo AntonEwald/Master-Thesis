@@ -8,74 +8,137 @@ output: html_document
 Here we generate GMM sample with varying shape of the cells.
 
 ```{r, eval = FALSE}
-#### Generates a GMM data sample ####
- # No need to run this code
-source("..\\Generate_GMM_Data.R")
-gauss_VS <- Generate_GMM_Data(n = 135000, clusters = 540, tissue_x = 600, tissue_y = 900, Cellwidth = 11.6, Mode = 3)
- saveRDS(gauss_VS, file = "GMM_data_varying_shape.rdata")
-########################################
+#### Load and plot data ####
+source("..//Generate_GMM_Data.R")
+data123 <- Generate_GMM_Data(c = 250, tissue_x = 400, tissue_y = 400, Cellwidth = 11.6, Mode = 3)
+saveRDS(data123, "(DATA) n = 57.000, c = 250, tissue = 400, VS.rdata")
+GMM_data_VS <- readRDS("(DATA) n = 57.000, c = 250, tissue = 400, VS.rdata") 
+ggplot(data = NULL, aes(x = GMM_data_VS$Coordinates[,1], y = GMM_data_VS$Coordinates[,2], col = GMM_data_VS$Samples)) +
+   geom_point() +
+   guides(col = 'none')
+data123$Coordinates %>% nrow()
 ```
 
 Load all needed objects
 ```{r}
 #### Load the saved data ####
-GMM_data_VS <- readRDS("GMM_data_varying_shape.rdata")
-GMM_coordinates_VS <- GMM_data_VS[[1]]
-True_density_VS <- GMM_data_VS[[2]]
-mu_VS <- GMM_data_VS[[3]]
-GMM_sample_VS <- GMM_data_VS[[4]]
+GMM_coordinates_VS <- GMM_data_VS$Coordinates
+True_density_VS <- GMM_data_VS$Density
+mu_VS <- GMM_data_VS$Mu
+GMM_sample_VS <- GMM_data_VS$Samples
 
 #Elements are d_ij
-  Adjacency_Matrix_VS <- kNNdist(GMM_coordinates_VS, k = 7, all = TRUE)
-  #saveRDS(Adjacency_Matrix, file = "Adjacency_Matrix.rda")
-#Adjacency_Matrix_VS <- readRDS("ADjacency_Matrix_VS.rda")
+Adjacency_Matrix_VS <- kNNdist(GMM_coordinates_VS, k = 7, all = TRUE)
 ##############################
 ```
 
-Here we can see how the data looks like
-```{r}
-sample_vec_VS <- c()
-for(i in 1:length(GMM_sample_VS)){
-  sample_vec_VS <- c(sample_vec_VS, rep(i, GMM_sample_VS[[i]][1]))
-}
-
-GMM_coordinates_VS %>% 
-  as_tibble() %>% 
-  mutate(Gaussian = as.factor(sample_vec_VS)) %>% 
-  filter(Gaussian %in% 1:540) %>% 
-  ggplot(aes(x = V1, y = V2, col = Gaussian)) +
-  geom_point(size = 1) +
-  guides(col = "none")
-```
-
-
 Same density estimators as for large dataset
 ```{r}
-#Density Estimations
-Density_Vector1_VS <- 1/rowSums(Adjacency_Matrix_VS)
-Density_vector2_VS <- 1/(1 + rowSums(Adjacency_Matrix_VS^2))
+#### Calculate all 3 density estimations ####
+#Density Estimations for rho1 and rho2
+rho1_VS <- 1/rowSums(Adjacency_Matrix_VS)
+rho2_VS <- 1/(1 + rowSums(Adjacency_Matrix_VS^2))
 
 kernel <- function(x, h){
   1/(2*pi*h^2) * exp(-1/2 * (x/h)^2)
 }
 #Calculate euclidean distance to all k-nearest neighbors (list with each gene-type in the list)
-knn_distance_VS <- kNNdist(GMM_coordinates_VS, k = 50, all = TRUE)
+knn_distance_VS <- kNNdist(GMM_coordinates_VS, k = 1000, all = TRUE)
 kde_dens_VS <- kernel(knn_distance_VS, h = 2.5) %>% 
   rowSums()
-##############################
+#############################################
+```
+
+New method to find modes
+```{r}
+gg <- cbind(1:nrow(GMM_coordinates_VS), t(dista(mu_VS, GMM_coordinates_VS)), rho1_VS, rho2_VS, kde_dens_VS)
+nr_of_clusters = length(unique(GMM_data_VS$Samples))
+Modes_VS1 <- matrix(NA, nrow = nr_of_clusters, ncol = 4)
+Modes_VS2 <- matrix(NA, nrow = nr_of_clusters, ncol = 4)
+Modes_VS3 <- matrix(NA, nrow = nr_of_clusters, ncol = 4)
+
+tt2 <- proc.time()
+for (j in 1:nr_of_clusters){
+a <- cbind(1:nrow(gg), gg[order(gg[,j+1]), ])
+peak1 <- a[1, 253]
+peak2 <- a[1, 254]
+peak3 <- a[1, 255]
+H1 = 2
+H2 = 2
+H3 = 2
+L1 = 0
+L2 = 0
+L3 = 0
+# Find estimated modes for rho1
+  while(L1 < 30){
+    if (a[H1, 253] > peak1){
+      peak1 <- a[H1, 253]
+      L1 = 0
+    }
+    else {
+      L1 = L1 + 1
+    }
+    H1 = H1 + 1
+  }
+ #Rho2
+  while(L2 < 30){
+    if (a[H2, 254] > peak2){
+      peak2 <- a[H2, 254]
+      L2 = 0
+    }
+    else {
+      L2 = L2 + 1
+    }
+    H2 = H2 + 1
+  }
+ #KDE
+  while(L3 < 30){
+    if (a[H3, 255] > peak3){
+      peak3 <- a[H3, 255]
+      L3 = 0
+    }
+    else {
+      L3 = L3 + 1
+    }
+    H3 = H3 + 1
+  }
+#KNN Index, Datapoint ID, Distance to Mode, Density
+Modes_VS1[j, ] = a[H1-31, c(1, 2, j+2, 253)]
+Modes_VS2[j, ] = a[H2-31, c(1, 2, j+2, 254)]
+Modes_VS3[j, ] = a[H3-31, c(1, 2, j+2, 255)]
+print(j)
+}
+
+cbind(1:nrow(gg), gg[order(gg[,4]), ])[1:10, 5]
+
+cbind(1:nrow(gg), gg[order(gg[,j+1]), ])[1:10, 253]
+
+gg[1:10, 2]
+
+LL = 0
+while(LL < 5){
+  LL = LL + 1
+  print(LL)
+}
 ```
 
 
+
+
+
+
 And now the Loop which takes time
-
+Find estimated modes
 ```{r}
-Estimated_modes1_VS <- matrix(NA, nrow = 540, ncol = 6)
-Estimated_modes2_VS <- matrix(NA, nrow = 540, ncol = 6)
-Estimated_modes3_VS <- matrix(NA, nrow = 540, ncol = 6)
+nr_of_clusters = length(unique(GMM_data_VS$Samples))
+Estimated_modes1_VS <- matrix(NA, nrow = nr_of_clusters, ncol = 6)
+Estimated_modes2_VS <- matrix(NA, nrow = nr_of_clusters, ncol = 6)
+Estimated_modes3_VS <- matrix(NA, nrow = nr_of_clusters, ncol = 6)
 
-for (i in 1:540) {
-  M <- cbind(1:nrow(GMM_coordinates_VS), apply(GMM_coordinates_VS, MARGIN = 1, FUN = function(x) sqrt(sum((x[]-mu_VS[i,])^2))), Density_Vector1_VS, Density_vector2_VS, kde_dens_VS)
-  ordered <- M[order(M[,2]),] %>% .[1:250,] %>% 
+tt <- proc.time()
+for (i in 1:10) {
+  M <- cbind(1:nrow(GMM_coordinates_VS), apply(GMM_coordinates_VS, MARGIN = 1, FUN = function(x) sqrt(sum((x[]-mu_VS[i,])^2))), rho1_VS, rho2_VS, kde_dens_VS)
+  ordered <- M[order(M[,2]),] %>% .[1:200,] %>% 
     cbind(1:nrow(.))
   Estimated_modes1_VS[i, ] <- ordered[which.max(ordered[,3]), ]
   Estimated_modes2_VS[i, ] <- ordered[which.max(ordered[,4]), ]
@@ -83,18 +146,40 @@ for (i in 1:540) {
 
   print(i)
 }
+time <- proc.time() - tt
 ```
 
+Faster loop but needs a N*k matrix (N = nr of data, k = nr of clusters). Can be hard for memory with very large data. Then above code works
 ```{r}
-Final_mode_df_VS <- Estimated_modes1_VS %>% 
-  as_tibble() %>% 
-  dplyr::select(V1, V2, V6) %>% 
-  rename(c("Datapoint ID" = V1, "Distance to mode" = V2, "KNN index" = V6)) %>% 
-  mutate(Method = "Inverse Distance") %>% 
-  add_row(`Datapoint ID` = Estimated_modes2_VS[, 1], `Distance to mode` = Estimated_modes2_VS[, 2], `KNN index` = Estimated_modes2_VS[, 6], Method = "Stationary Distribution") %>% 
-  add_row(`Datapoint ID` = Estimated_modes3_VS[, 1], `Distance to mode` = Estimated_modes3_VS[, 2], `KNN index` = Estimated_modes3_VS[, 6], Method = "KDE") 
+gg <- cbind(1:nrow(GMM_coordinates_VS), t(dista(mu_VS, GMM_coordinates_VS)), rho1_VS, rho2_VS, kde_dens_VS)
+nr_of_clusters = length(unique(GMM_data_VS$Samples))
+Estimated_modes1_VSb <- matrix(NA, nrow = nr_of_clusters, ncol = 4)
+Estimated_modes2_VSb <- matrix(NA, nrow = nr_of_clusters, ncol = 4)
+Estimated_modes3_VSb <- matrix(NA, nrow = nr_of_clusters, ncol = 4)
+tt2 <- proc.time()
+for (j in 1:10){
+a <- cbind(1:200, gg[order(gg[,j+1]), ][1:200, ])
 
- saveRDS(Final_mode_df_VS, file = "Estimated_Modes_vs_True_Data_VS.rdata")
+Estimated_modes1_VSb[j, ] = a[which.max(a[, 253]), c(1, 2, j+2, 253)]
+Estimated_modes2_VSb[j, ] = a[which.max(a[, 254]), c(1, 2, j+2, 254)]
+Estimated_modes3_VSb[j, ] = a[which.max(a[, 255]), c(1, 2, j+2, 255)]
+print(j)
+}
+time2 <- proc.time() - tt2
+```
+
+
+
+
+```{r}
+Final_mode_df_VS <- Modes_VS1 %>% 
+  as_tibble() %>% 
+  rename(c("KNN index" = V1, "Datapoint ID" = V2, "Distance to mode" = V3, "Density" = V4)) %>% 
+  mutate(Method = "Inverse Distance") %>% 
+  add_row(`KNN index` = Modes_VS2[, 1], `Datapoint ID` = Modes_VS2[, 2], `Distance to mode` = Modes_VS2[, 3], `Density` = Modes_VS2[, 4], Method = "Stationary Distribution") %>% 
+  add_row(`KNN index` = Modes_VS3[, 1], `Datapoint ID` = Modes_VS3[, 2], `Distance to mode` = Modes_VS3[, 3], `Density` = Modes_VS3[, 4], Method = "KDE") 
+
+saveRDS(Final_mode_df_VS, file = "Estimated_Modes_VS.rdata")
 ```
 
 All above is ground work
@@ -103,10 +188,10 @@ All Below is Analysis
 
 
 ```{r}
-Estimated_vs_True_VS <- readRDS("Estimated_Modes_vs_True_Data_VS.rdata")
+Estimated_vs_True_VS <- readRDS("Estimated_Modes_VS.rdata")
 
 Estimated_Mode_Statistics_VS <- Estimated_vs_True_VS %>% 
-    mutate(ID = rep(1:540, 3)) %>% 
+    mutate(ID = rep(1:nr_of_clusters, 3)) %>% 
   mutate(x = GMM_coordinates_VS[`Datapoint ID`, 1],
          y = GMM_coordinates_VS[`Datapoint ID`, 2],
          mu_x = rep(mu_VS[, 1], 3),
@@ -116,8 +201,8 @@ Estimated_Mode_Statistics_VS <- Estimated_vs_True_VS %>%
 
 # All points around the second peak of KDE
 Far_distance_VS <- Estimated_vs_True_VS %>% 
-  mutate(ID = rep(1:540, 3)) %>% 
-  filter(`Distance to mode` > 3) 
+  mutate(ID = rep(1:nr_of_clusters, 3)) %>% 
+  filter(`Distance to mode` > 2.3) 
 ```
 
 KDE has some estimated modes far away again. 
@@ -134,18 +219,13 @@ Estimated_vs_True_VS %>%
   ggplot(aes(x = `Distance to mode`, col = Method)) +
   geom_density() +
   labs(title = "Distribution of distance to true mode")
+ggsave("1 Distribution of Distance to True Mode.png")
 
 
 mean_sd_above_distribution_VS <- Estimated_vs_True_VS %>% 
   group_by(Method) %>% 
   summarise(mean = mean(`Distance to mode`),
             sd = sd(`Distance to mode`))
-
-Estimated_Mode_Statistics_VS %>% 
-  filter(`Distance to mode` > 5) %>% 
-  ggplot(aes(x = mu_x, y = mu_y)) +
-  geom_point()
-
 ```
 
 RGB Plot + bias/variance of spatial
@@ -155,7 +235,7 @@ RGB Plot + bias/variance of spatial
 ggplot(Estimated_Mode_Statistics_VS, aes(x = diff_x, y = diff_y, col = Method)) +
   geom_point() +
   labs(title = "Estimated modes position from the perspective of true modes")
-
+ggsave("3 RGB plot.png")
 ggplot(Estimated_Mode_Statistics_VS, aes(x = diff_x, y = diff_y)) +
   geom_point() +
   facet_grid(~Method)

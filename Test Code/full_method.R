@@ -3,7 +3,7 @@
 # Clustering on cells based on density estimations
 
 ###############################################################
-library(dbscan)
+
 
 
 #### Function for estimating density
@@ -15,6 +15,7 @@ calc_rho <- function(df, k = 7, estimator){
   # :Param k: Number of neighbors when calculating the Adjacency Matrix.
   # :Param estimator: 1 for 1/distance, 2 for stationary distribution
   
+  suppressWarnings(suppressMessages(library(dbscan)))
   #Weighted Adjaceny matrix
   W <- kNNdist(df, k, all = TRUE)
   #Density Estimations
@@ -55,7 +56,7 @@ calc_delta <- function(df, rho, track){
 
 
 #### Data for Clusters vs Constant plot
-clust_vs_const <- function(df, k = 7, estimator = 2, track = FALSE){
+findStats <- function(df, k = 7, estimator = 2, track = FALSE){
   
   # By default k = 7 is used for the k-nearest neighbor distances
   # and the stationary distribution is used for density estimation
@@ -71,13 +72,13 @@ clust_vs_const <- function(df, k = 7, estimator = 2, track = FALSE){
   
   a <- lm(log(delta)~log(rho))$coefficient[[2]]
   #Find which constant to use for the decision line ln(rho) + a*ln(delta) = const
-  const <-  seq(0, 1, by = 0.001)
+  threshold <-  seq(0, 1, by = 0.001)
   clusters <- c()
   
-  for (i in 1:length(const)){
-    clusters[i] <- sum(delta > (const[i]*rho)^a)
+  for (i in 1:length(threshold)){
+    clusters[i] <- sum(delta > (threshold[i]*rho)^a)
   }
-  stats <- list(df = df, rho = rho, delta = delta, coefs = cbind(const, clusters), slope = a)
+  stats <- list(df = df, rho = rho, delta = delta, coefs = cbind(threshold, clusters), slope = a)
   class(stats) <- 'fuzzyDensClust'
   stats
 }
@@ -90,14 +91,21 @@ plot.fuzzyDensClust <- function(x, ...){
 
 #### Returns the ID of potential cluster centers
 clustering <- function(stats, threshold){
-  library(Rfast)
-  #Find slope of ln(rho) + a*ln(delta)
+  suppressWarnings(suppressMessages(library(Rfast)))
   delta = stats$delta
   rho = stats$rho
-  a <- stats$slope
+  a = stats$slope
   center_id = which(delta > (threshold*rho)^a)
   cent_to_point_dist <- 1/(1+dista(stats$df[center_id,], stats$df))
   assignments <- sweep(cent_to_point_dist, 2, colSums(cent_to_point_dist), "/")
+  
+  #Set all cluster centers to 100% chance of being to its own cluster
+  
+  for (i in 1:length(center_id)) {
+    j <- which.max(assignments[,center_id[i]])
+    assignments[,center_id[i]] = c(rep(0, i-1), 1, rep(0, length(center_id)-i))
+  }
+  
   return(list(centerID = center_id, assignments = assignments))
 }
 
