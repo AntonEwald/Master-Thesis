@@ -18,11 +18,25 @@ source("..//full_method.R")
 #Load Data
 data2 <- readRDS("(DATA) GMM c = 8")
 #Rho, Delta, Slope, Decision Graph
-stats2 <- findStats(df = data2$Coordinates, k = 7, estimator = 2, track = FALSE)
+stats2 <- findStats(df = data2$Coordinates, k = 7, estimator = 1, track = FALSE)
 #Plot Decision Graph
 plot(stats2)
-clusters <- clustering(stats2, 0.2)
+clusters <- clustering(stats2, 0.3)
+clusters$assignments[, 1:10]
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -53,6 +67,8 @@ ggplot(data = NULL) +
 #Xie-Beni Index
 peak_to_peak2 <- dista(data2$Coordinates[clusters$centerID,], data2$Coordinates[clusters$centerID,])
 xb_small <- sum((1/ncol(clusters$assignments) * clusters$assignments * dista(data2$Coordinates[clusters$centerID,], data2$Coordinates)))/min(peak_to_peak2[which(peak_to_peak2 > 0)])
+
+xb_small
 ```
 
 
@@ -69,7 +85,12 @@ Notes
  To Do:
   - Add CTD
   - Add Noise to the GMM as outliers
-  - Sök FOI jobbet
 
-
-
+Difference between max and min should be large
+L = 2 or 3 times the avg distance between cells
+Take descision graph, fit a linear regression line and subtract it to flip it down on the x-axis. Then check for max and min values (derivative = 0, i.e. peaks and dalar)
+Highest rho in grid has delta = L.
+Monotonic Regression
+Loop
+Plateau finder
+Look at clustering from fast search paper (look at closest neighbor, then second and so on.)

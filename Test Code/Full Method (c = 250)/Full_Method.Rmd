@@ -22,7 +22,9 @@ clustersc250 <- clustering(statsc250, 0.095)
 ggplot(data = NULL) +
   geom_point(aes(x = data_c250$Coordinates[,1], y = data_c250$Coordinates[,2], col = data_c250$Samples)) +
   geom_point(aes(x = data_c250$Coordinates[clustersc250$centerID, 1], y = data_c250$Coordinates[clustersc250$centerID ,2]), color = "red") +
-  guides(col = "none")
+  guides(col = "none") +
+  geom_vline(xintercept = 12.8) +
+  geom_hline(yintercept = 12.8)
 ```
 
 ```{r}
