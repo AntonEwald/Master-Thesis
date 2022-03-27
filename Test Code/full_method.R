@@ -58,7 +58,7 @@ findCenters <- function(sub_stats){
     if(length(p) == 0){
       center_id = c()
     }
-    
+    else if (length(v) == 0)
     else{
       if (p[1,2] > v[1,2]) { 
         p = rbind(c(0, 1, 0, 0), p)

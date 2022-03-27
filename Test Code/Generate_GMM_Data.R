@@ -15,7 +15,7 @@ Generate_GMM_Data <- function(clusters, tissue_x, tissue_y, Cellwidth, Mode){
   # :Clust: different mean vectors (different gaussians in GMM)
   # :Mode: 3 Modes (1 = fixt cellsize, 2 = only change size, 3 = change size and shape)
   mu <-cbind(runif(clusters, 0, tissue_x), runif(clusters, 0, tissue_y))
-  variance <- matrix(NA, nrow = n, ncol = 2)
+  variance <- matrix(NA, nrow = nrow(mu), ncol = 2)
   # Decide which gaussian to sample from (same probabilities)
   # Create Sample from GMM
   gene_coord <- matrix(NA, ncol = 2, nrow = 0)

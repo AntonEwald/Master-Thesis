@@ -16,7 +16,8 @@ We will not calculate the edges. This is fine since these are wrong anyways sinc
 
 
 Grid loop for analysis.
-Functional one in scripts
+Functional one in scripts (for manual cluster detection)
+Below is testing for automatic decisions
 ```{r}
 data_c250 <- readRDS("DE (250K genes, varying cellsize + cellshape)//(DATA) n = 57.000, c = 250, tissue = 400, VS.rdata")
 ############# Find average length between clusters #####################
@@ -108,12 +109,6 @@ for (i in 2:(ygrids-1)){
   print(i)
 }
 
-sum(cluster_centers %in% center_id)
-length(center_id)
-rhoanddelta <- find_delta_rho(daata$Coordinates, avgCellDist = avg_mode_dist, k = 7, estimator = 2, track = TRUE)
-
-cluster_centers %>% as_tibble() %>% mutate(same = ifelse(value %in% center_id, 1, 0))
-
 ggplot(data = NULL) +
   geom_point(aes(x = daata$Coordinates[,1], y = daata$Coordinates[,2], col = daata$Samples)) +
   geom_point(aes(x = daata$Coordinates[cluster_centers,1], y = daata$Coordinates[cluster_centers,2]), color = "red", size = 2) +
@@ -123,65 +118,84 @@ ggplot(data = NULL) +
   geom_point(aes(x = daata$Coordinates[small_grid[,5], 1], y = daata$Coordinates[small_grid[,5], 2]), color = "purple") +
   guides(col = "none")
 
-deltas %>% 
-  as_tibble() %>% 
-  rowid_to_column() %>% 
-  mutate(center = ifelse(V4 %in% cluster_centers, 1, 0)) %>% 
-  arrange(desc(center)) %>% 
-  filter(V4 == 29211)
+
 ```
 
-Function without derivatives that find the cluster centers
+
+Function without derivatives that find the cluster centers based on "counts" of occurance of nr of clusters, i.e. length of a bar. Should fix so that we use derivatives with some smoothing. Smoothing is needed since what is we have 100 ones, 5 twos, 5 threes, 99 fours, 99 fives, 5 sixes, 5 sevens and so on. Then we should pick 4 or 5 clusters, not just 1. 
 ```{r}
 auto_peak_finder <- function(sub_stats){
 delta = sub_stats[,2]
   rho = sub_stats[,3]
-  a <- lm(log(delta)~log(rho))$coefficient[[2]]
+  iso <- as.stepfun(isoreg(x = log(rho), y = -log(delta))) #monotonic regression line (minus on y cause we have decreasing correlation)
+  a = -iso(log(rho)) # Minus again to revert back the minus above
   #Find which constant to use for the decision line ln(rho) + a*ln(delta) = const
-  threshold <-  seq(0.001, 0.05, by = 0.001)
+  threshold <-  seq(0.1, log(L), by = 0.1) 
   clusters <- c()
   
   for (i in 1:length(threshold)){
-    clusters[i] <- sum(delta > (threshold[i]*rho)^a)
+    clusters[i] <- sum(log(delta) > (threshold[i] + exp(a)))
   }
-nr_clusters <- as.numeric(sort(table(clusters), decreasing = TRUE)[1] %>% as.data.frame() %>% rownames())
-
+nr_clusters <- as.numeric(sort(table(clusters), decreasing = TRUE)[1] %>% as.data.frame() %>% rownames()) #Cluster with most occurence
+# Add derivative automation instead
   
 stuffs <- cbind(threshold, clusters) 
-chosen_thresh <- median(stuffs[stuffs[,2] == nr_clusters, 1])
-peak_id <- sub_stats[which(delta > (chosen_thresh*rho)^a), 1]
+chosen_thresh <- median(stuffs[stuffs[,2] == nr_clusters, 1]) #Take the threshold in the middle of the peak and valley
+peak_id <- sub_stats[which(delta > (chosen_thresh*rho)^a), 1] #Datapoint ID for cluster centers
 return(peak_id)
 }
+```
 
-
-
-
-
-a = lm(log(sub_stats[,2])~log(sub_stats[,3]))$coefficients[[2]]
+Below is for testing how monotonic regression works in decision graph
+Also used to try and automate threshold decision.
+Here I need to decide on how to fix min and max of threshold.
+```{r}
 rho = sub_stats[,3]
+delta = sub_stats[,2]
+
+iso <- as.stepfun(isoreg(x = log(rho), y = -log(delta)))
+a = -iso(log(rho))
 # Some analysis on what threshold to pick
-y5 <- (0.1*rho)^a
-y4 <- (0.2*rho)^a
-y <- (0.4*rho)^a
-y2 <- (0.5*rho)^a
-y3 <- (0.3*rho)^a
-y6 <- (0.01*rho)^a
-y7 <- (0.05*rho)^a
+y <- exp(a) +1
+y5 <- exp(a) + 3
+y4 <- exp(a) +6
+y2 <- exp(a) +9
+y3 <- exp(a) +14
+y6 <- exp(a) +18
 
 
 ggplot(data = NULL) +
-  geom_point(aes(sub_stats[,3], sub_stats[,2])) +
-  geom_line(aes(rho, y), color = "green") +
-  geom_line(aes(rho, y2), color = "blue") +
-    geom_line(aes(rho, y3), color = "red")+
-      geom_line(aes(rho, y4), color = "orange")+
-      geom_line(aes(rho, y5), color = "purple") +
-      geom_line(aes(rho, y6), color = "pink") +
-      geom_line(aes(rho, y7), color = "dark blue") 
-
-
-plot(log(sub_stats[,3]), log(sub_stats[,2]))
+  geom_point(aes(log(rho), (delta))) +
+  geom_line(aes(log(rho), y), color = "yellow") +
+      geom_line(aes(log(rho), y5), color = "orange")+
+      geom_line(aes(log(rho), y4), color = "red")   +
+geom_line(aes(log(rho), y2), color = "light blue") +
+      geom_line(aes(log(rho), y3), color = "blue")+
+      geom_line(aes(log(rho), y6), color = "purple")
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Below is the findcenter function but there is a better one in scripts
 ```{r}
@@ -281,9 +295,10 @@ Last Time:
  - I get all the same cluster centers if I dont do automatic and do all at the end. Only miss those at the boundries as we should.
  
 Next time: 
-- There is a problem. We over cluster. Try to save every decision graph, number of clusters chosen and which points are chosen at each grid and see when we pick too many clusters.
-- Gå igenom all kod en gång till och se om allt stämmer.
-- How should we chose how far the threshold goes? Is it the same for each square?
+- Calculating Deltas by grids works perfect
+- Finding number of clusters manually works perfect
+- Finding number of clusters automatically is problematic. Monotonic regression works good now.
+- Needs to be done: Find how to decide on threshold intervals and step size!!!
 
 
  - Monotonic Regression on finding the slope a
