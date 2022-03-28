@@ -9,67 +9,49 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+library(Rfast)
+library(tidyverse)
 
+```
 
 Small dataset
 ```{r}
 #### START ####
-source("..//full_method.R")
+source("..//Full_Method_Updated.R")
+source("..//Generate_GMM_Data.R")
 #Load Data
-data2 <- readRDS("(DATA) GMM c = 8")
-#Rho, Delta, Slope, Decision Graph
-stats2 <- findStats(df = data2$Coordinates, k = 7, estimator = 1, track = FALSE)
-#Plot Decision Graph
-plot(stats2)
-clusters <- clustering(stats2, 0.3)
-clusters$assignments[, 1:10]
-```
+daata = readRDS("..//DE (250K genes, varying cellsize + cellshape)//(DATA) n = 57.000, c = 250, tissue = 400, VS.rdata")
+#daata = Generate_GMM_Data(clusters = 6000, tissue_x = 500, tissue_y = 500, Cellwidth = 11.6, Mode = 3)
+mode_distances <- dista(daata$Mu, daata$Mu)
+diag(mode_distances) <- NA
+avg_mode_dist <- mean(apply(mode_distances, 1, min, na.rm = TRUE))
+avgPeakDist <- avg_mode_dist
+cluster_peaks <- findClusterPeaks(daata$Coordinates, avgPeakDist = avgPeakDist, k = 7, estimator = 2)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Some Analysis of the data with 8 clusters
-```{r}
-#Look at data
-ggplot(data = NULL, aes(x = data2$Coordinates[,1], y = data2$Coordinates[,2], col = data2$Samples)) +
-  geom_point()
-
-#Create plot to see soft clustering
-cluster_probs <- as_tibble(cbind(t(clusters$assignments), data2$Coordinates)) %>% 
-  rename("x" = V9, "y" = V10) %>% 
-  gather(Class, Value, -c(x, y))
-centers2 <- as_tibble(data2$Coordinates[clusters$centerID, ]) %>% 
-  rename("x" = V1, "y" = V2)
-ggplot(cluster_probs, aes(x = x, y = y, col = Value)) +
-  geom_point() +
-  geom_point(data = centers2, aes(x = x, y = y), color = "green", size = 1.5) +
-  facet_wrap(~Class) +
-  scale_color_gradient(low = "blue", high = "red")
-
-#True vs Estimated peak
 ggplot(data = NULL) +
-  geom_point(aes(x = data2$Coordinates[clusters$centerID,1], y = data2$Coordinates[clusters$centerID, 2]), col = "blue") +
-  geom_point(aes(x = data2$Mu[,1], y = data2$Mu[,2]), col = "red")
-
-#Xie-Beni Index
-peak_to_peak2 <- dista(data2$Coordinates[clusters$centerID,], data2$Coordinates[clusters$centerID,])
-xb_small <- sum((1/ncol(clusters$assignments) * clusters$assignments * dista(data2$Coordinates[clusters$centerID,], data2$Coordinates)))/min(peak_to_peak2[which(peak_to_peak2 > 0)])
-
-xb_small
+  geom_point(aes(x = daata$Coordinates[,1], y = daata$Coordinates[,2], col = daata$Samples)) +
+  geom_point(aes(x = daata$Mu[,1], daata$Mu[,2]), color = "red", size = 3) +
+  geom_point(aes(x = daata$Coordinates[cluster_peaks$ClusterPeaks,1], y = daata$Coordinates[cluster_peaks$ClusterPeaks,2])) +
+  guides(col = "none") +
+  geom_hline(yintercept = ymin + 0:ygrids*grid_size) +
+  geom_vline(xintercept = xmin + 0:xgrids*grid_size)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -77,20 +59,56 @@ Simulated GMM
 -----------------------------------------------------------------
 osmFish data
 
+
+```{r}
+library(loomR)
+osmData <- readRDS("..//SSAM Reconstructed//gene coordinates osmFISH DF.rdata")
+
+osmPeaks <- findClusterPeaks(cbind(osmData$V1, osmData$V2), avgPeakDist = 8, k = 7, estimator = 2)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 osmFish data
 ------------------------------------------------------------------
 Notes
 
+Last Last time:
+ - Fixed automatic way to find threshold
+  - used kernel regression here
+ - Fixed loop to loop over grids
  
- To Do:
-  - Add CTD
-  - Add Noise to the GMM as outliers
+Last Time:
+ - Made the threshold finding for each grid instead of one at the end
+ - The loop now calculates correct deltas, exactly the same as for the method of doing entire images at once.
+ - I get all the same cluster centers if I dont do automatic and do all at the end. Only miss those at the boundries as we should.
+ - Distance between consecutive threshold lines increase as we move up the graph.
+ - I only look at small grids with at least 6 points. Is this ok? Should we increase this threshold?
+ - I let the right most part of the monotonic regression line go up to L/4 and it works
+Last time 3: 
+- Calculating Deltas by grids works perfect
+- Finding number of clusters manually works perfect
+- All calculations works great.
 
-Difference between max and min should be large
-L = 2 or 3 times the avg distance between cells
-Take descision graph, fit a linear regression line and subtract it to flip it down on the x-axis. Then check for max and min values (derivative = 0, i.e. peaks and dalar)
-Highest rho in grid has delta = L.
-Monotonic Regression
-Loop
-Plateau finder
+Next time:
+- Final problem: I get R sessions aborted when running with large data
+- Clustering
+
 Look at clustering from fast search paper (look at closest neighbor, then second and so on.)

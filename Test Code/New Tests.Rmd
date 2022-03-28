@@ -11,6 +11,11 @@ output: html_document
 source("full_method.R")
 ```
 
+```{r}
+source("Full_Method_Updated.R")
+
+cluster_peaks <- findClusterPeaks(data_c250$Coordinates, avgPeakDist = avg_mode_dist, k = 7, estimator = 2)
+```
 Now fix the grid loop for calculating delta faster
 We will not calculate the edges. This is fine since these are wrong anyways since the images potentially does not include many of its neighbors.
 
@@ -33,7 +38,6 @@ rho = calc_rho(daata$Coordinates, k=7, estimator = 2)
 sorted_rho <- cbind(daata$Coordinates, rho, 1:length(rho)) %>% 
   .[order(.[,3], decreasing = TRUE), ]
 sorted <- cbind(1:length(rho), sorted_rho)
-
 xmin <- min(daata$Coordinates[,1])
 xmax <- max(daata$Coordinates[,1])
 ymin <- min(daata$Coordinates[,2])
@@ -43,7 +47,7 @@ ylength <- ymax - ymin
 grid_size <- L/3
 xgrids <- ceiling(xlength/grid_size)
 ygrids <- ceiling(ylength/grid_size)
-deltas <- matrix(NA, ncol = 4, nrow = nrow(daata$Coordinates))
+deltas <- c()
 cluster_centers <- c()
 for (i in 2:(ygrids-1)){
   for (j in 2:(xgrids-1)){
@@ -58,48 +62,35 @@ for (i in 2:(ygrids-1)){
                      sorted[, 3] < ymin + i*grid_size &
                        sorted[, 3] >= ymin + (i-1)*grid_size, ]
     
-    if (is.vector(small_grid) == TRUE){ #Only one point within our smaller grid
-      # It should be an outlier most likely so we don't need to consider it
-    }
-    else if (nrow(small_grid) < 6){
-     # Dont add anything
-    }
-    else {
+    if(length(small_grid) > 6*5){ #more than 6 points
     #Atleast 6 points in the small grid
       sub_stats <- matrix(NA, ncol = 3, nrow = nrow(small_grid))
-      #Calculate our deltas for the small grid
+    
+        #Calculate our deltas for the small grid
       for (k in 1:nrow(small_grid)){ #For every point in the small grid
-        if (sum(large_grid[,1] < small_grid[k, 1]) == 0){ #There is no point with larger density
-          deltas[small_grid[k, 5], 1] = L #Give max delta
-          deltas[small_grid[k, 5], 2] = i
-          deltas[small_grid[k, 5], 3] = j
-          deltas[small_grid[k, 5], 4] = small_grid[k, 1]
+        
+        if (sum(large_grid[,1] < small_grid[k, 1]) > 1){
+          delta = min(apply(large_grid[large_grid[,1] < small_grid[k,1], ][,2:3], 1, function(x) sqrt(sum((x-small_grid[k,2:3])^2))))
+          deltas[small_grid[k, 5]] <- delta
+          sub_stats[k, 1] <- small_grid[k, 5]
+          sub_stats[k, 2] <- delta
+          sub_stats[k, 3] <- small_grid[k, 4]
+        }
+        else if (sum(large_grid[,1] < small_grid[k, 1]) == 0){ #There is no point with larger density
+          deltas[small_grid[k, 5]] = L #Give max delta
 
           sub_stats[k, 1] <- small_grid[k, 5] 
           sub_stats[k, 2] <- L 
           sub_stats[k, 3] <- small_grid[k, 4]
         }
         
-        else if (sum(large_grid[,1] < small_grid[k,1]) == 1){
+        else {
           delta = sqrt((large_grid[large_grid[,1] < small_grid[k,1], ][2] - small_grid[k,2])^2 + (large_grid[large_grid[,1] < small_grid[k,1], ][3] - small_grid[k,3])^2)
-          deltas[small_grid[k,5], 1] <- delta
-          deltas[small_grid[k, 5], 2] = i
-          deltas[small_grid[k, 5], 3] = j
-          deltas[small_grid[k, 5], 4] = small_grid[k, 1]
+          deltas[small_grid[k,5]] <- delta
           sub_stats[k, 1] <-small_grid[k, 5]
           sub_stats[k, 2] <- delta
           sub_stats[k, 3] <- small_grid[k, 4]
 
-        }
-        else{
-          delta = min(apply(large_grid[large_grid[,1] < small_grid[k,1], ][,2:3], 1, function(x) sqrt(sum((x-small_grid[k,2:3])^2))))
-          deltas[small_grid[k, 5], 1] <- delta
-          deltas[small_grid[k, 5], 2] = i
-          deltas[small_grid[k, 5], 3] = j
-          deltas[small_grid[k, 5], 4] = small_grid[k, 1]
-          sub_stats[k, 1] <- small_grid[k, 5]
-          sub_stats[k, 2] <- delta
-          sub_stats[k, 3] <- small_grid[k, 4]
         }
       }
       #Here we should check for density peaks
@@ -109,15 +100,15 @@ for (i in 2:(ygrids-1)){
   print(i)
 }
 
+
 ggplot(data = NULL) +
   geom_point(aes(x = daata$Coordinates[,1], y = daata$Coordinates[,2], col = daata$Samples)) +
   geom_point(aes(x = daata$Coordinates[cluster_centers,1], y = daata$Coordinates[cluster_centers,2]), color = "red", size = 2) +
-  geom_point(aes(x = daata$Coordinates[center_id,1], y = daata$Coordinates[center_id,2]), color = "blue", size = 1) +
+  geom_point(aes(x = daata$Coordinates[center_id, 1], y = daata$Coordinates[center_id, 2]), color = "green", size = 1) +
+  #geom_point(aes(x = daata$Coordinates[small_grid[,5],1], y = daata$Coordinates[small_grid[,5],2]), color = "purple", size = 3) +
   geom_vline(xintercept = xmin + 0:xgrids*grid_size) +
   geom_hline(yintercept = ymin+ 0:ygrids*grid_size) +
-  geom_point(aes(x = daata$Coordinates[small_grid[,5], 1], y = daata$Coordinates[small_grid[,5], 2]), color = "purple") +
   guides(col = "none")
-
 
 ```
 
@@ -127,42 +118,84 @@ Function without derivatives that find the cluster centers based on "counts" of 
 auto_peak_finder <- function(sub_stats){
 delta = sub_stats[,2]
   rho = sub_stats[,3]
+indicator = c(rep(1, floor(length(delta)*0.1)), rep(0, length(delta) - floor(length(delta)*0.1)))
   iso <- as.stepfun(isoreg(x = log(rho), y = -log(delta))) #monotonic regression line (minus on y cause we have decreasing correlation)
   a = -iso(log(rho)) # Minus again to revert back the minus above
   #Find which constant to use for the decision line ln(rho) + a*ln(delta) = const
-  threshold <-  seq(0.1, log(L), by = 0.1) 
+  threshold <-  seq(exp(- min(a)), exp(log(L/3) - a[length(a)-(which.max(delta*indicator)-1)]), length.out = 30) 
   clusters <- c()
   
   for (i in 1:length(threshold)){
-    clusters[i] <- sum(log(delta) > (threshold[i] + exp(a)))
+    clusters[i] <- sum((delta) > (exp(a)*threshold[i]))
   }
-nr_clusters <- as.numeric(sort(table(clusters), decreasing = TRUE)[1] %>% as.data.frame() %>% rownames()) #Cluster with most occurence
+  if (length(unique(clusters)) == 1){
+    nr_clusters = clusters[1]
+  }
+  else {
+nr_clusters <- sort(table(clusters), decreasing = TRUE) %>% 
+  as.data.frame() %>% 
+  mutate(clusters = as.numeric(as.character(clusters))) %>% 
+  filter(Freq == max(Freq)) %>% .[,1] %>% max() #Cluster with most occurence
+}
 # Add derivative automation instead
   
 stuffs <- cbind(threshold, clusters) 
 chosen_thresh <- median(stuffs[stuffs[,2] == nr_clusters, 1]) #Take the threshold in the middle of the peak and valley
-peak_id <- sub_stats[which(delta > (chosen_thresh*rho)^a), 1] #Datapoint ID for cluster centers
+peak_id <- sub_stats[which(delta > (exp(a)*chosen_thresh)), 1] #Datapoint ID for cluster centers
 return(peak_id)
 }
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Below is for testing how monotonic regression works in decision graph
 Also used to try and automate threshold decision.
 Here I need to decide on how to fix min and max of threshold.
 ```{r}
-rho = sub_stats[,3]
-delta = sub_stats[,2]
+rho = c(sub_stats[,3])
+delta = c(sub_stats[,2])
 
 iso <- as.stepfun(isoreg(x = log(rho), y = -log(delta)))
+plot(iso)
 a = -iso(log(rho))
+b = lm(log(delta)~log(rho))$coefficient[[2]]
 # Some analysis on what threshold to pick
-y <- exp(a) +1
-y5 <- exp(a) + 3
-y4 <- exp(a) +6
-y2 <- exp(a) +9
-y3 <- exp(a) +14
-y6 <- exp(a) +18
+y <- exp(a+0)*2.86
+y5 <- exp(a)*4
+y4 <- exp(a)*5
+y2 <- exp(a)*6.3 
+y3 <- exp(a)*7.5
+y6 <- exp(a)*exp(log(L/3) - min(a))
 
+z <- rho^(b) +1
+z5 <- rho^(b) + 3
+z4 <- rho^(b) +6
+z2 <- rho^(b) +9
+z3 <- rho^(b) +14
+z6 <- rho^(b) +18
 
 ggplot(data = NULL) +
   geom_point(aes(log(rho), (delta))) +
@@ -172,6 +205,30 @@ ggplot(data = NULL) +
 geom_line(aes(log(rho), y2), color = "light blue") +
       geom_line(aes(log(rho), y3), color = "blue")+
       geom_line(aes(log(rho), y6), color = "purple")
+
+ggplot(data = NULL) +
+  geom_point(aes((rho), (delta))) +
+  geom_line(aes((rho), z), color = "yellow") +
+      geom_line(aes((rho), z5), color = "orange")+
+      geom_line(aes((rho), z4), color = "red")   +
+geom_line(aes((rho), z2), color = "light blue") +
+      geom_line(aes((rho), z3), color = "blue")+
+      geom_line(aes((rho), z6), color = "purple")
+
+plot(rho, (delta))
+
+ggplot(data = NULL) +
+  geom_point(aes(log(rho), (delta))) +
+  geom_hline(yintercept = exp(0 + seq(0.1, log(L), by = 0.1)))
+
+daata$Coordinates %>% as_tibble() %>% 
+  rowid_to_column() %>% 
+  filter(V2 < 140 & V2 > 120 & V1 > xmin & V1 < 30 ) %>% 
+  mutate(rho = cluster_peaks$rho[rowid]) %>% ggplot(aes(x = V1, y = V2, col = rho)) +
+  geom_point() +
+  xlim(xmin, xmax) +
+  ylim(ymin, ymax) +
+  geom_vline(xintercept = xmin + 0:2*grid_size)
 ```
 
 
@@ -197,7 +254,7 @@ geom_line(aes(log(rho), y2), color = "light blue") +
 
 
 
-Below is the findcenter function but there is a better one in scripts
+Below is the findcenter function but there is a better one in scripts (for using derivatives)
 ```{r}
 findCenters <- function(sub_stats){
 delta_sub = sub_stats[,2]
@@ -238,69 +295,12 @@ library(pracma)
 ```
 
 
-Nothin Important below
-```{r}
-source("full_method.R")
-
-my_find <- findThreshold(stats)
-
-plot(statsc250)
-abline(v = my_find$Threshold)
-
-fit <- ksmooth(my_find$new_coefs[,1], my_find$new_coefs[,2], kernel = "normal", bandwidth = 0.1)
-p <- findpeaks(fit$y)
-v <- findpeaks(-fit$y)
-ggplot(data = NULL, aes(x = my_find$new_coefs[,1], y = fit$y)) +
-  geom_line()+
-  geom_point(aes(x = my_find$new_coefs[p[,2],1], y = my_find$new_coefs[p[,2],2]), shape = "+", color = "blue", size = 3) +
-  geom_point(aes(x = my_find$new_coefs[v[,2],1], y = my_find$new_coefs[v[,2],2]), shape = "-", color = "red", size = 3)
 
 
 
 
-test_clustering <- clustering(stats, my_find$Threshold)
-test_clustering$centerID
 
 
-ggplot(data = NULL, aes(x = statsc250$rho, y = deltas)) +
-  geom_point()
-
-as_tibble(cbind(statsc250$rho, data_c250$Samples)) %>% 
-  group_by(V2) %>% 
-  summarise(max = max(V1)) %>% 
-  arrange(max)
- 
-ggplot(data = NULL, aes(x = data_c250$Coordinates[,1], y = data_c250$Coordinates[,2], col = deltas)) + geom_point()
 
 
-ggplot(data = NULL) +
-  geom_point(aes(x = daata$Coordinates[,1], y = daata$Coordinates[,2], col = daata$Samples)) +
-  guides(col = "none") +
-  geom_vline(xintercept = xmin + 0:(xgrids)*grid_size) +
-  geom_hline(yintercept = ymin + 0:(ygrids)*grid_size)
-
-plot(statsc250)
-abline(v = 0.095)
-``` 
-
-
-Last Last time:
- - Fixed automatic way to find threshold
-  - used kernel regression here
- - Fixed loop to loop over grids
- 
-Last Time:
- - Made the threshold finding for each grid instead of one at the end
- - The loop now calculates correct deltas, exactly the same as for the method of doing entire images at once.
- - I get all the same cluster centers if I dont do automatic and do all at the end. Only miss those at the boundries as we should.
- 
-Next time: 
-- Calculating Deltas by grids works perfect
-- Finding number of clusters manually works perfect
-- Finding number of clusters automatically is problematic. Monotonic regression works good now.
-- Needs to be done: Find how to decide on threshold intervals and step size!!!
-
-
- - Monotonic Regression on finding the slope a
- - Clustering as used by fast search paper (it is hard clustering)
  - 
