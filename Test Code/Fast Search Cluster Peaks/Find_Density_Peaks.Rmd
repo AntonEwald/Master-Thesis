@@ -12,6 +12,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(Rfast)
 library(tidyverse)
+library(palette)
+library(Polychrome)
+
+
 ```
 
 Small dataset
@@ -20,7 +24,7 @@ Small dataset
 source("..//Full_Method_Updated.R")
 source("..//Generate_GMM_Data.R")
 #Load Data
-daata = readRDS("..//DE (250K genes, varying cellsize + cellshape)//(DATA) n = 57.000, c = 250, tissue = 400, VS.rdata")
+daata = readRDS("..//Density Estimation//(DATA) n = 57.000, c = 250, tissue = 400, VS.rdata")
 #daata = Generate_GMM_Data(clusters = 6000, tissue_x = 500, tissue_y = 500, Cellwidth = 11.6, Mode = 3)
 mode_distances <- dista(daata$Mu, daata$Mu)
 diag(mode_distances) <- NA
@@ -35,6 +39,44 @@ ggplot(data = NULL) +
   guides(col = "none") +
   geom_hline(yintercept = ymin + 0:ygrids*grid_size) +
   geom_vline(xintercept = xmin + 0:xgrids*grid_size)
+
+cluster_id <- rep(0, length(cluster_peaks$rho))
+cluster_id[cluster_peaks$ClusterPeaks] = 1:length(cluster_peaks$ClusterPeaks)
+
+stats <- cbind(1:nrow(cluster_peaks$delta), cluster_peaks$delta, cluster_peaks$rho, cluster_id) %>% 
+  .[order(.[,4], decreasing = TRUE), ] 
+
+for (i in 1:nrow(stats)){
+  if (stats[i, 5] == 0){ #Only look at non cluster centers
+    if (is.na(stats[i, 3])){ #Points with nearest neighbor with higher density outside of our border
+      stats[i, 5] = length(cluster_peaks$ClusterPeaks) + 1
+    }
+    else if (stats[i,3] != 0){ #If there is a neighbor with higher density
+    stats[i, 5] = stats[stats[,1] == stats[i, 3], 5] #Give same cluster ID as nearest neighbor with higher density
+    }
+    else {
+      stats[i, 5] = 0
+    }
+  }
+  if (i %% 100 == 0){
+    print(i)
+  }
+}
+
+assignments <- stats[order(stats[,1]),][,5]
+
+# create your own color palette based on `seedcolors`
+P36 = createPalette(213,  c("#FF0000", "#00FF00", "#0000FF"))
+
+names(P36) <- 1:213
+P36[213] <- "grey"
+
+ggplot(data = NULL) +
+  geom_point(aes(x = daata$Coordinates[,1], y = daata$Coordinates[,2], col = as.factor(assignments))) +
+  guides(col = 'none') +
+  geom_hline(yintercept = ymin + 0:ygrids*grid_size) +
+  geom_vline(xintercept = xmin + 0:xgrids*grid_size) +
+  scale_color_manual(values = P36)
 ```
 
 
@@ -115,5 +157,7 @@ Last time 3:
 Next time:
 - Final problem: I get R sessions aborted when running with large data
 - Clustering
+- I am not doing any outlier analysis atm.
 
 Look at clustering from fast search paper (look at closest neighbor, then second and so on.)
+

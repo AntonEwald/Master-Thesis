@@ -43,7 +43,6 @@ auto_peak_finder <- function(sub_stats, avgPeakDist){
   indicator = c(rep(1, floor(length(delta)*0.1)), rep(0, length(delta) - floor(length(delta)*0.1)))
   iso <- as.stepfun(isoreg(x = log(rho), y = -log(delta))) #monotonic regression line (minus on y cause we have decreasing correlation)
   a = -iso(log(rho)) # Minus again to revert back the minus above
-  #threshold <-  seq(exp(- min(a)), exp(log(L/3) - min(a)), length.out = 30) 
   threshold <-  seq(exp(- min(a)), exp(log(L/4) - a[which.max(delta*indicator)]), length.out = 30) 
   clusters <- c()
   # Decides number of clusters
@@ -69,6 +68,39 @@ auto_peak_finder <- function(sub_stats, avgPeakDist){
 
 
 
+#' @param clusterStats: Object from findclusterPeaks function
+clusterAssignments <- function(clusterStats){
+  #Set cluster ID to cluster peaks
+  cluster_id <- rep(0, length(clusterStats$rho))
+  cluster_id[clusterStats$ClusterPeaks] = 1:length(clusterStats$ClusterPeaks)
+  
+  stats <- cbind(1:nrow(clusterStats$delta), clusterStats$delta, clusterStats$rho, cluster_id) %>% 
+    .[order(.[,4], decreasing = TRUE), ] 
+  
+  #Give each point a cluster ID based on method from paper "Clustering by Fast Search"
+  for (i in 1:nrow(stats)){
+    if (stats[i, 5] == 0){ #Only look at non cluster centers
+      if (is.na(stats[i, 3])){ #Points with nearest neighbor with higher density outside of our border
+        stats[i, 5] = length(clusterStats$ClusterPeaks) + 1
+      }
+      else if (stats[i,3] != 0){ #If there is a neighbor with higher density
+        stats[i, 5] = stats[stats[,1] == stats[i, 3], 5] #Give same cluster ID as nearest neighbor with higher density
+      }
+      else {
+        stats[i, 5] = 0
+      }
+    }
+    if (i %% 100 == 0){
+      print(i)
+    }
+  }
+  
+  assignments <- as.factor(stats[order(stats[,1]),][,5])
+  
+}
+
+
+
 #' Function for estimating Delta by grids instead of over entire data. 
 #' Since the computational time is of order o(N^2), when the dataset is too large 
 #' the computation time is not feasible. Hence we introduce a method for estimating
@@ -83,7 +115,7 @@ auto_peak_finder <- function(sub_stats, avgPeakDist){
 #' @param k: Number of neighbors when calculating the Adjacency Matrix.
 #' @param estimator: 1 for 1/distance, 2 for stationary distribution
 
-findClusterPeaks <- function(df, avgPeakDist, k = 7, estimator = 2){
+findClusterPeaks <- function(df, avgPeakDist, k = 7, estimator = 2, clustering = FALSE){
   L = avgPeakDist*3
   rho = calc_rho(df, k=k, estimator = estimator)
   #Order by rho
@@ -99,7 +131,7 @@ findClusterPeaks <- function(df, avgPeakDist, k = 7, estimator = 2){
   grid_size <- avgPeakDist
   xgrids <- ceiling(xlength/grid_size)
   ygrids <- ceiling(ylength/grid_size)
-  deltas <- c()
+  deltas <- matrix(NA, ncol = 2, nrow = nrow(df))
   cluster_centers <- c()
   for (i in 2:(ygrids-1)){
     for (j in 2:(xgrids-1)){
@@ -114,29 +146,34 @@ findClusterPeaks <- function(df, avgPeakDist, k = 7, estimator = 2){
                              sorted[, 3] < ymin + i*grid_size &
                              sorted[, 3] >= ymin + (i-1)*grid_size, ]
       
-      if(length(small_grid) > 6*5){ #more than 6 points
+      if(length(small_grid) > 2*5){ #more than 6 points
         #Atleast 6 points in the small grid
         sub_stats <- matrix(NA, ncol = 3, nrow = nrow(small_grid))
         #Calculate our deltas for the small grid
         for (k in 1:nrow(small_grid)){ #For every point in the small grid
           
           if (sum(large_grid[,1] < small_grid[k, 1]) > 1){
-            delta = min(apply(large_grid[large_grid[,1] < small_grid[k,1], ][,2:3], 1, function(x) sqrt(sum((x-small_grid[k,2:3])^2))))
-            deltas[small_grid[k, 5]] <- delta
+            dists <- apply(large_grid[large_grid[,1] < small_grid[k,1], ][,2:3], 1, function(x) sqrt(sum((x-small_grid[k,2:3])^2)))
+            delta = min(dists)
+            neighbor_id = large_grid[which.min(dists), 5]
+            deltas[small_grid[k, 5], 1] <- delta
+            deltas[small_grid[k, 5], 2] <- neighbor_id
             sub_stats[k, 1] <- small_grid[k, 5]
             sub_stats[k, 2] <- delta
             sub_stats[k, 3] <- small_grid[k, 4]
           }
           else if (sum(large_grid[,1] < small_grid[k, 1]) == 0){ #There is no point with larger density
-            deltas[small_grid[k, 5]] = L #Give max delta
+            deltas[small_grid[k, 5], 1] = L #Give max delta
+            deltas[small_grid[k, 5], 2] = 0
             sub_stats[k, 1] <- small_grid[k, 5] 
             sub_stats[k, 2] <- L 
             sub_stats[k, 3] <- small_grid[k, 4]
           }
           
-          else {
+          else { # Only one point with higher density
             delta = sqrt((large_grid[large_grid[,1] < small_grid[k,1], ][2] - small_grid[k,2])^2 + (large_grid[large_grid[,1] < small_grid[k,1], ][3] - small_grid[k,3])^2)
-            deltas[small_grid[k,5]] <- delta
+            deltas[small_grid[k,5], 1] <- delta
+            deltas[small_grid[k,5], 2] <- large_grid[1, 5]
             sub_stats[k, 1] <-small_grid[k, 5]
             sub_stats[k, 2] <- delta
             sub_stats[k, 3] <- small_grid[k, 4]
@@ -150,6 +187,11 @@ findClusterPeaks <- function(df, avgPeakDist, k = 7, estimator = 2){
     print(i)
     
   }
-  est_delta = c(deltas, rep(NA, length(rho)-length(deltas))) #Add NA to the points missed
-  return(list(ClusterPeaks = cluster_centers, rho = rho, delta = deltas))
+  
+  cluster_info <- list(ClusterPeaks = cluster_centers, rho = rho, delta = deltas)
+  
+  if (clustering == TRUE){
+    assignments = clusterAssignments(cluster_info)
+  }
+  return(append(cluster_info, list(assignments = assignments)))
 }
