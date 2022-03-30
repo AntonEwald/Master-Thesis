@@ -257,29 +257,18 @@ ggsave("Functional_Form.png")
 
 
 
-Done last time: I figured out how they used the maximum filter (they dont use local peak max!!). I applied it on the vector field and got a similar result as in the paper (code part of SSAM). They chopped off part of the x-axis so I did the same.
+Done last time: 
+I figured out how they used the maximum filter (they dont use local peak max!!). I applied it on the vector field and got a similar result as in the paper (code part of SSAM). They chopped off part of the x-axis so I did the same.
 
 
-
+For Next Time:
 They never use peak_local_max in the source code! They just make use of the maximum_filter.
   - Here is how their downsampling works: They use ndi.maximum_filter(size = 3). We have a pixel image with L1-norm density value at each pixel. If size = 3, then every pixel now gets the largest density value from any pixel that is at most 3 pixelsteps away from it. Then take your dataframe, filter away any pixel that does not have a total kde value contained in this maximum_filter matrix we get.
   - What does this really mean: We pick every pixel with the highest density conditioned on that the pixels needs to be at least "size" amount of steps away from eachothers. So if we have 2 high density pixels close to eachother, we only pick the pixel with the largest density.
   
-
 From the code they specify width = 2080, height = 3380 um. Does this mean they have rectangles instead of squares as pixels? Is this good/bad?
-
-Ask Mats and/or Chun: how the normalization works. It is called sctransform and based on biology and negative binomial. ( Hafemeister, C. & Satija, R. Normalization and variance stabilization of singlecell RNA-seq data using regularized negative binomial regression. Genome
-Biol. 20, 296 (2019).)
-
-Ask Chun: Will we use the MI estimation I(X, Y) as the KDE?
-
-In paper by Kraskov. How do we implement a kernel? Is it the choice of mu(x,y)?
-
-He mentioned using perplexity to get adaptive bandwidth. How does this work?
 
 Different methods to use for boundary bias issues:
   - Smoothing Splines
   - Local likelihood density estimation (Dens Est Paper)
   - Local Linear Regression (Supervised Learning course material)
-
-Also need to read about Smoothing Splines (See Supervised Learning prints sec 6.1-6.3)

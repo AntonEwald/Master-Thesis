@@ -1,10 +1,9 @@
-###############################################################
-# This is the main source for all function needed to perform
-# Clustering on cells based on density estimations
+#' This is the main source for all function needed to perform
+#' Clustering on cells based on density estimations
 
-###############################################################
 
 #' Function for estimating pointdensity
+#' 
 #' @param df: An (N by d) matrix with coordinates of datapoints 
 #' @param k: Number of neighbors when calculating the Adjacency Matrix.
 #' @param estimator: 1 for 1/distance, 2 for stationary distribution
@@ -26,7 +25,7 @@ calc_rho <- function(df, k = 7, estimator){
 }
 
 
-#' Automatically decides on cluster peaks from decision graph
+#'  Automatically decides on cluster peaks from decision graph
 #'  This method takes in an Nx3 matrix with point ID, delta and rho estimations.
 #'  It then fits a line through log(delta) as a function of log(rho) by
 #'  monotonic regression. This regression line is then shifted from the bottom
@@ -34,11 +33,12 @@ calc_rho <- function(df, k = 7, estimator){
 #'  with columns threshold and nr of clusters chosen. The number of clusters chosen
 #'  is the most frequently occurence. 
 #'  Possible improvment: Make decision based on max/min values instead of count
+#'  
 #'  @param sub_stats: An Nx3 matrix containing datapoint ID, Delta, Rho
 
 auto_peak_finder <- function(sub_stats, avgPeakDist){
   L = 3*avgPeakDist
-  delta = sub_stats[,2]
+  delta = sub_stats[,2] + 0.0001 #R Crash if you input log(0) in y vector into isoreg()
   rho = sub_stats[,3]
   indicator = c(rep(1, floor(length(delta)*0.1)), rep(0, length(delta) - floor(length(delta)*0.1)))
   iso <- as.stepfun(isoreg(x = log(rho), y = -log(delta))) #monotonic regression line (minus on y cause we have decreasing correlation)
@@ -148,6 +148,7 @@ findClusterPeaks <- function(df, avgPeakDist, k = 7, estimator = 2){
       }
     }
     print(i)
+    
   }
   est_delta = c(deltas, rep(NA, length(rho)-length(deltas))) #Add NA to the points missed
   return(list(ClusterPeaks = cluster_centers, rho = rho, delta = deltas))

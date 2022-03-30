@@ -1,19 +1,21 @@
+
+
 #### Simulate Data ####
+
+#' A function to create a dataframe consisting of a GMM sample
+#' comparable to some in-situ sample
+#' @param clusters: Decides the number of cells
+#' @param avg_genes: Average number of genes per cell
+#' @param cellwidth: Used as component variance in covariance matrix (cell width in um)
+#' @param tissue_x: Size of the tissue in mikrometers in x axis
+#' @param tissue_y: Size of the tissue in mikrometers in y axis
+#' @param Mode: 3 Modes (1 = fixt cellsize, 2 = only change size, 3 = change size and shape)
 Generate_GMM_Data <- function(clusters, tissue_x, tissue_y, Cellwidth, Mode){
   library(MASS)
   library(emdbook)
   library(tidyverse)
   library(mvtnorm)
-  ## A function to create a dataframe consisting of a GMM sample
-  ## comparable to some in-situ sample
-  
-  # :Param clusters: Decides the number of cells
-  # :Param avg_genes: Average number of genes per cell
-  # :Param cellwidth: Used as component variance in covariance matrix (cell width in um)
-  # :Param tissue_x: Size of the tissue in mikrometers in x axis
-  # :Param tissue_y: Size of the tissue in mikrometers in y axis
-  # :Clust: different mean vectors (different gaussians in GMM)
-  # :Mode: 3 Modes (1 = fixt cellsize, 2 = only change size, 3 = change size and shape)
+
   mu <-cbind(runif(clusters, 0, tissue_x), runif(clusters, 0, tissue_y))
   variance <- matrix(NA, nrow = nrow(mu), ncol = 2)
   # Decide which gaussian to sample from (same probabilities)

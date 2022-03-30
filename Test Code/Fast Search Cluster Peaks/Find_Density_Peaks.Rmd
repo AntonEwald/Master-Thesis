@@ -12,7 +12,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(Rfast)
 library(tidyverse)
-
 ```
 
 Small dataset
@@ -65,8 +64,14 @@ library(loomR)
 osmData <- readRDS("..//SSAM Reconstructed//gene coordinates osmFISH DF.rdata")
 
 osmPeaks <- findClusterPeaks(cbind(osmData$V1, osmData$V2), avgPeakDist = 8, k = 7, estimator = 2)
+saveRDS(osmPeaks, file = "osmPeaksStats.rdata")
 
-
+osmDataFiltered <- osmData %>% filter(V1 < 1600)
+ggplot(data = NULL) +
+  geom_point(aes(x = osmDataFiltered$V1[osmPeaks$ClusterPeaks], y = osmDataFiltered$V2[osmPeaks$ClusterPeaks]), color = "blue", size = 0.1) +
+  scale_y_reverse() +
+  scale_x_reverse() +
+  coord_fixed(ratio = 1)
 ```
 
 
